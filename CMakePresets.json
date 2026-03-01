@@ -1,0 +1,57 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON"
+      }
+    },
+    {
+      "name": "insiders-debug",
+      "displayName": "VS2026 Insiders Debug",
+      "inherits": "base"
+    },
+    {
+      "name": "insiders-release",
+      "displayName": "VS2026 Insiders Release",
+      "inherits": "base"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "insiders-debug",
+      "configurePreset": "insiders-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "insiders-release",
+      "configurePreset": "insiders-release",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "insiders-debug",
+      "configurePreset": "insiders-debug",
+      "configuration": "Debug",
+      "filter": {
+        "exclude": {
+          "label": "integration"
+        }
+      },
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

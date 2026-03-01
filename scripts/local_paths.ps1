@@ -1,0 +1,6 @@
+$script:VcvarsPath = "D:\visualstudioInsiders\VC\Auxiliary\Build\vcvars64.bat"
+$script:DefaultDepsRoot = "D:\CPPcode\AiDeskPetMan\build\insiders-debug\vcpkg_installed\x64-windows"
+$script:DefaultQtRoot = "D:\qt\6.10.1\msvc2022_64"
+$script:DefaultCubismSdkRoot = "D:\CPPcode\AiDeskPetMan\third_party\CubismSdkForNative"
+$script:DebugPreset = "insiders-debug"
+$script:ReleasePreset = "insiders-release"

@@ -1,0 +1,21 @@
+# Build artifacts
+/build/
+/out/
+/logs/
+
+# Editor and platform files
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Generated dumps
+*.dmp
+
+# Assets that are intentionally local-only
+/assets/skins/**
+!/assets/skins/.gitkeep
+/assets/voices/**
+!/assets/voices/.gitkeep
+/assets/models/**
+!/assets/models/.gitkeep

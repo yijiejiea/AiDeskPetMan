@@ -1,0 +1,535 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SettingsWindow</class>
+ <widget class="QDialog" name="SettingsWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>760</width>
+    <height>620</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MikuDesk 设置中心</string>
+  </property>
+  <layout class="QVBoxLayout" name="main_layout">
+   <item>
+    <widget class="QTabWidget" name="settings_tab_widget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="runtime_tab">
+      <attribute name="title">
+       <string>运行</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="runtime_layout">
+       <item>
+        <widget class="QGroupBox" name="live2d_group_box">
+         <property name="title">
+          <string>Live2D 行为</string>
+         </property>
+         <layout class="QVBoxLayout" name="live2d_group_layout">
+          <item>
+           <widget class="QCheckBox" name="live2d_enabled_check_box">
+            <property name="text">
+             <string>启用 Live2D 渲染</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="eye_tracking_enabled_check_box">
+            <property name="text">
+             <string>启用眼神跟随鼠标</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="idle_animation_enabled_check_box">
+            <property name="text">
+             <string>启用待机动作循环</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QFormLayout" name="live2d_form_layout">
+            <item row="0" column="0">
+             <widget class="QLabel" name="idle_interval_label">
+              <property name="text">
+               <string>待机触发间隔（秒）</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QSpinBox" name="idle_interval_spin_box">
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>3600</number>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="idle_group_label">
+              <property name="text">
+               <string>待机动作组</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLineEdit" name="idle_group_line_edit"/>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="model_width_label">
+              <property name="text">
+               <string>Model Width (px)</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QSpinBox" name="model_width_spin_box">
+              <property name="minimum">
+               <number>64</number>
+              </property>
+              <property name="maximum">
+               <number>4096</number>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <widget class="QLabel" name="model_height_label">
+              <property name="text">
+               <string>Model Height (px)</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="QSpinBox" name="model_height_spin_box">
+              <property name="minimum">
+               <number>64</number>
+              </property>
+              <property name="maximum">
+               <number>4096</number>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="window_group_box">
+         <property name="title">
+          <string>窗口行为</string>
+         </property>
+         <layout class="QVBoxLayout" name="window_group_layout">
+          <item>
+           <widget class="QCheckBox" name="always_on_top_check_box">
+            <property name="text">
+             <string>始终置顶</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="runtime_vertical_spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="skin_tab">
+      <attribute name="title">
+       <string>皮套</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="skin_layout">
+       <item>
+        <layout class="QFormLayout" name="skin_form_layout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="skin_root_label">
+           <property name="text">
+            <string>皮套根目录</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <layout class="QHBoxLayout" name="skin_root_row_layout">
+           <item>
+            <widget class="QLineEdit" name="skin_root_line_edit"/>
+           </item>
+           <item>
+            <widget class="QPushButton" name="browse_skin_root_button">
+             <property name="text">
+              <string>浏览...</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="current_skin_label">
+           <property name="text">
+            <string>当前皮套</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <layout class="QHBoxLayout" name="current_skin_row_layout">
+           <item>
+            <widget class="QComboBox" name="skin_selector_combo_box"/>
+           </item>
+           <item>
+            <widget class="QPushButton" name="refresh_skins_button">
+             <property name="text">
+              <string>刷新列表</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QPushButton" name="import_skin_button">
+         <property name="text">
+          <string>导入皮套目录...</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="skin_help_label">
+         <property name="text">
+          <string>导入时请选择包含 .model3.json 的模型目录，程序会复制到皮套根目录下。</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="skin_vertical_spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="ai_tab">
+      <attribute name="title">
+       <string>AI</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="ai_layout">
+       <item>
+        <layout class="QFormLayout" name="ai_form_layout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="inference_mode_label">
+           <property name="text">
+            <string>推理模式</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QComboBox" name="inference_mode_combo_box">
+           <item>
+            <property name="text">
+             <string>Token API</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>本地模型</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="api_base_url_label">
+           <property name="text">
+            <string>API Base URL</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="api_base_url_line_edit"/>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="api_model_label">
+           <property name="text">
+            <string>API 模型名</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLineEdit" name="api_model_line_edit"/>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="api_token_label">
+           <property name="text">
+            <string>API Token</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QLineEdit" name="api_token_line_edit">
+           <property name="echoMode">
+            <enum>QLineEdit::PasswordEchoOnEdit</enum>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="local_model_path_label">
+           <property name="text">
+            <string>本地模型路径</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <layout class="QHBoxLayout" name="local_model_path_row_layout">
+           <item>
+            <widget class="QLineEdit" name="local_model_path_line_edit"/>
+           </item>
+           <item>
+            <widget class="QPushButton" name="browse_local_model_button">
+             <property name="text">
+              <string>浏览...</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QLabel" name="ai_help_label">
+         <property name="text">
+          <string>说明：当前阶段先保存配置，不直接接入完整对话链路。</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="ai_vertical_spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="debug_tab">
+      <attribute name="title">
+       <string>Debug</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="debug_layout">
+       <item>
+        <widget class="QGroupBox" name="debug_control_group_box">
+         <property name="title">
+          <string>调试配置</string>
+         </property>
+         <layout class="QFormLayout" name="debug_form_layout">
+          <item row="0" column="0" colspan="2">
+           <widget class="QCheckBox" name="debug_enabled_check_box">
+            <property name="text">
+             <string>启用 Debug 模式</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0" colspan="2">
+           <widget class="QCheckBox" name="show_performance_metrics_check_box">
+            <property name="text">
+             <string>启用性能监控</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="metrics_refresh_label">
+            <property name="text">
+             <string>刷新间隔（毫秒）</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSpinBox" name="metrics_refresh_ms_spin_box">
+            <property name="minimum">
+             <number>250</number>
+            </property>
+            <property name="maximum">
+             <number>10000</number>
+            </property>
+            <property name="singleStep">
+             <number>250</number>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="performance_group_box">
+         <property name="title">
+          <string>实时性能（当前进程）</string>
+         </property>
+         <layout class="QFormLayout" name="performance_form_layout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="perf_cpu_label">
+            <property name="text">
+             <string>CPU 占用</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QLabel" name="perf_cpu_value_label">
+            <property name="text">
+             <string>--</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="perf_gpu_label">
+            <property name="text">
+             <string>GPU 占用</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLabel" name="perf_gpu_value_label">
+            <property name="text">
+             <string>--</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="perf_memory_label">
+            <property name="text">
+             <string>内存占用</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLabel" name="perf_memory_value_label">
+            <property name="text">
+             <string>--</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="perf_gpu_memory_label">
+            <property name="text">
+             <string>GPU 显存</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLabel" name="perf_gpu_memory_value_label">
+            <property name="text">
+             <string>--</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="debug_help_label">
+         <property name="text">
+          <string>说明：GPU 指标基于 Windows 计数器，若系统不支持会显示 N/A。</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="debug_vertical_spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="status_label">
+     <property name="text">
+      <string>就绪</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="button_layout">
+     <item>
+      <spacer name="button_left_spacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="apply_button">
+       <property name="text">
+        <string>应用</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="save_button">
+       <property name="text">
+        <string>保存到配置</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="close_button">
+       <property name="text">
+        <string>关闭</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

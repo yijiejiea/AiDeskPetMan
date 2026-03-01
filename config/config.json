@@ -1,0 +1,52 @@
+{
+  "ai": {
+    "api_base_url": "https://api.openai.com/v1",
+    "api_model": "gpt-4o-mini",
+    "inference_mode": "token_api",
+    "local_model_path": "assets/models"
+  },
+  "crash": {
+    "dump_directory": "logs",
+    "dump_type": "normal",
+    "enable_handler": true,
+    "write_minidump": true
+  },
+  "debug": {
+    "crash_test": false,
+    "enabled": false,
+    "metrics_refresh_ms": 1000,
+    "show_performance_metrics": true,
+    "smoke_test_seconds": 0
+  },
+  "log": {
+    "debug_mode": false,
+    "log_directory": "logs",
+    "log_file_name": "mikudesk.log",
+    "log_level": "info",
+    "max_file_count": 5,
+    "max_file_size_mb": 10
+  },
+  "security": {
+    "encrypted_api_key": ""
+  },
+  "skin": {
+    "current": "miku/runtime",
+    "directory": "assets/skins",
+    "enable_eye_tracking": true,
+    "enable_idle_animation": true,
+    "enable_live2d": true,
+    "idle_interval_seconds": 10,
+    "idle_motion_group": "Idle",
+    "model_height_px": 560,
+    "model_width_px": 300
+  },
+  "window": {
+    "always_on_top": true,
+    "enable_window": true,
+    "height": 600,
+    "idle_fps": 30,
+    "interactive_fps": 60,
+    "opacity": 1.0,
+    "width": 400
+  }
+}

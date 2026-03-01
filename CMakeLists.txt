@@ -22,6 +22,17 @@ option(MIKUDESK_ENABLE_TTS "Enable TTS integration" OFF)
 set(MIKUDESK_CUBISM_SDK_PATH
     "${CMAKE_SOURCE_DIR}/third_party/CubismSdkForNative"
     CACHE PATH "Path to Cubism SDK for Native root directory")
+set(_mikudesk_default_llama_path "${CMAKE_SOURCE_DIR}/third_party/llama.cpp")
+if(NOT EXISTS "${_mikudesk_default_llama_path}/CMakeLists.txt" AND
+   EXISTS "${CMAKE_SOURCE_DIR}/third_party/llama/CMakeLists.txt")
+  set(_mikudesk_default_llama_path "${CMAKE_SOURCE_DIR}/third_party/llama")
+endif()
+set(MIKUDESK_LLAMA_CPP_PATH
+    "${_mikudesk_default_llama_path}"
+    CACHE PATH "Path to llama.cpp root directory")
+set(MIKUDESK_IMGUI_PATH
+    "${CMAKE_SOURCE_DIR}/third_party/imgui"
+    CACHE PATH "Path to Dear ImGui root directory")
 
 include(CTest)
 
@@ -32,9 +43,14 @@ endif()
 find_package(fmt CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Network)
 
 set(mikudesk_core_sources
+  src/ai/chat_context.cpp
+  src/ai/chat_service.cpp
+  src/ai/cloud_engine.cpp
+  src/ai/local_engine.cpp
+  src/ai/sse_parser.cpp
   src/app/application.cpp
   src/app/config.cpp
   src/core/scheduler.cpp
@@ -47,12 +63,28 @@ set(mikudesk_core_sources
   src/renderer/skin_loader.cpp
   src/resource/config_store.cpp
   src/security/dpapi_secret_store.cpp
+  src/ui/chat_bubble.cpp
+  src/ui/imgui_layer.cpp
   src/ui/settings_window.cpp
   src/window/desk_pet_window.cpp
   ui/settings/settings_window.ui
   ui/window/desk_pet_window.ui
   src/window/window_manager.cpp
 )
+
+set(imgui_sources)
+if(EXISTS "${MIKUDESK_IMGUI_PATH}/imgui.cpp")
+  set(imgui_sources
+    "${MIKUDESK_IMGUI_PATH}/imgui.cpp"
+    "${MIKUDESK_IMGUI_PATH}/imgui_draw.cpp"
+    "${MIKUDESK_IMGUI_PATH}/imgui_tables.cpp"
+    "${MIKUDESK_IMGUI_PATH}/imgui_widgets.cpp"
+    "${MIKUDESK_IMGUI_PATH}/backends/imgui_impl_opengl3.cpp"
+  )
+else()
+  message(FATAL_ERROR
+    "Dear ImGui source is missing. Expected at: ${MIKUDESK_IMGUI_PATH}")
+endif()
 
 set(cubism_framework_sources)
 set(cubism_core_library)
@@ -95,8 +127,32 @@ if(MIKUDESK_ENABLE_LIVE2D)
   message(STATUS "Using Cubism Core library: ${cubism_core_library}")
 endif()
 
-add_library(mikudesk_core
+if(MIKUDESK_ENABLE_LLAMA)
+  if(NOT EXISTS "${MIKUDESK_LLAMA_CPP_PATH}/CMakeLists.txt")
+    message(FATAL_ERROR
+      "MIKUDESK_ENABLE_LLAMA=ON but llama.cpp source is missing: ${MIKUDESK_LLAMA_CPP_PATH}")
+  endif()
+
+  # Keep llama.cpp static in this workspace to avoid runtime DLL lookup issues.
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+  set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+  add_subdirectory("${MIKUDESK_LLAMA_CPP_PATH}" "${CMAKE_BINARY_DIR}/llama.cpp")
+
+  if(MSVC)
+    foreach(_llama_target IN ITEMS llama llama_shared)
+      if(TARGET ${_llama_target})
+        # Some llama.cpp revisions use UTF-8 literals that break with MSVC char8_t mode.
+        target_compile_options(${_llama_target} PRIVATE /Zc:char8_t-)
+      endif()
+    endforeach()
+  endif()
+endif()
+
+add_library(mikudesk_core STATIC
   ${mikudesk_core_sources}
+  ${imgui_sources}
   ${cubism_framework_sources}
 )
 
@@ -106,6 +162,10 @@ set_target_properties(mikudesk_core PROPERTIES
 )
 
 target_include_directories(mikudesk_core PUBLIC src)
+target_include_directories(mikudesk_core PRIVATE
+  "${MIKUDESK_IMGUI_PATH}"
+  "${MIKUDESK_IMGUI_PATH}/backends"
+)
 if(MIKUDESK_ENABLE_LIVE2D)
   target_include_directories(mikudesk_core PRIVATE
     "${MIKUDESK_CUBISM_SDK_PATH}/Core/include"
@@ -122,6 +182,7 @@ target_link_libraries(mikudesk_core
     Qt6::Gui
     Qt6::OpenGL
     Qt6::OpenGLWidgets
+    Qt6::Network
     Qt6::Widgets
   PRIVATE
     dbghelp
@@ -141,6 +202,19 @@ if(MIKUDESK_ENABLE_LIVE2D)
   target_compile_definitions(mikudesk_core PUBLIC MIKUDESK_ENABLE_LIVE2D=1)
 else()
   target_compile_definitions(mikudesk_core PUBLIC MIKUDESK_ENABLE_LIVE2D=0)
+endif()
+
+if(MIKUDESK_ENABLE_LLAMA)
+  if(TARGET llama)
+    target_link_libraries(mikudesk_core PRIVATE llama)
+  elseif(TARGET llama_shared)
+    target_link_libraries(mikudesk_core PRIVATE llama_shared)
+  else()
+    message(FATAL_ERROR "MIKUDESK_ENABLE_LLAMA=ON but no llama target was exported")
+  endif()
+  target_compile_definitions(mikudesk_core PUBLIC MIKUDESK_ENABLE_LLAMA=1)
+else()
+  target_compile_definitions(mikudesk_core PUBLIC MIKUDESK_ENABLE_LLAMA=0)
 endif()
 
 add_executable(mikudesk src/main.cpp)
@@ -199,3 +273,11 @@ set_tests_properties(crash_dump_integration_test PROPERTIES LABELS integration)
 add_executable(performance_monitor_smoke_test tests/performance_monitor_smoke_test.cpp)
 target_link_libraries(performance_monitor_smoke_test PRIVATE mikudesk_core)
 add_test(NAME performance_monitor_smoke_test COMMAND performance_monitor_smoke_test)
+
+add_executable(sse_parser_test tests/sse_parser_test.cpp)
+target_link_libraries(sse_parser_test PRIVATE mikudesk_core)
+add_test(NAME sse_parser_test COMMAND sse_parser_test)
+
+add_executable(chat_context_test tests/chat_context_test.cpp)
+target_link_libraries(chat_context_test PRIVATE mikudesk_core)
+add_test(NAME chat_context_test COMMAND chat_context_test)

@@ -14,6 +14,7 @@
 
 #include "renderer/live2d_canvas.hpp"
 #include "spdlog/spdlog.h"
+#include "ui/chat_bubble.hpp"
 #include "ui/settings_window.hpp"
 #include "ui_desk_pet_window.h"
 
@@ -22,6 +23,7 @@ namespace mikudesk::window {
 namespace {
 
 constexpr int kMinModelDimensionPx = 64;
+constexpr int kMaxModelDimensionPx = 4096;
 constexpr int kDragClickThresholdPx = 4;
 
 std::filesystem::path NormalizePath(const std::filesystem::path& path) {
@@ -83,6 +85,7 @@ DeskPetWindow::DeskPetWindow(const app::AppConfig& app_config,
       ui_(std::make_unique<Ui::DeskPetWindow>()),
       on_close_(std::move(on_close)),
       app_config_(app_config),
+      chat_service_(std::make_unique<ai::ChatService>(app_config_)),
       config_path_(config_path),
       skin_config_(app_config.skin),
       live2d_renderer_(std::make_unique<renderer::Live2DRenderer>()) {
@@ -98,9 +101,8 @@ DeskPetWindow::DeskPetWindow(const app::AppConfig& app_config,
   setAttribute(Qt::WA_TranslucentBackground, true);
   setAttribute(Qt::WA_NoSystemBackground, false);
   setMouseTracking(true);
-  setFixedSize(window_config.width, window_config.height);
-  setWindowOpacity(window_config.opacity);
   setFocusPolicy(Qt::StrongFocus);
+  ApplyWindowGeometryConfig();
 
   available_skin_directories_ = DiscoverAvailableSkins();
 
@@ -113,6 +115,8 @@ DeskPetWindow::DeskPetWindow(const app::AppConfig& app_config,
   performance_monitor_.SetRefreshIntervalMs(app_config_.debug.metrics_refresh_ms);
 
   EnsureLive2dViewInitialized();
+  chat_bubble_ = std::make_unique<ui::ChatBubble>(this);
+  chat_bubble_->hide();
   settings_window_ = std::make_unique<ui::SettingsWindow>(
       app_config_, config_path_, [this](const app::AppConfig& updated_config) {
         ApplyUpdatedConfig(updated_config);
@@ -139,6 +143,9 @@ void DeskPetWindow::AdvanceFrame() {
   if (live2d_canvas_ != nullptr) {
     live2d_canvas_->update();
   }
+  if (chat_bubble_ != nullptr && chat_bubble_->isVisible()) {
+    chat_bubble_->Reposition(GetModelRectInView());
+  }
 }
 
 void DeskPetWindow::ShowSettingsWindow() {
@@ -149,6 +156,37 @@ void DeskPetWindow::ShowSettingsWindow() {
   settings_window_->show();
   settings_window_->raise();
   settings_window_->activateWindow();
+}
+
+void DeskPetWindow::ToggleInferenceMode() {
+  if (chat_service_ == nullptr) {
+    return;
+  }
+
+  const app::InferenceMode current_mode = chat_service_->GetInferenceMode();
+  const app::InferenceMode target_mode = current_mode == app::InferenceMode::kTokenApi
+                                             ? app::InferenceMode::kLocalModel
+                                             : app::InferenceMode::kTokenApi;
+  auto switch_result = chat_service_->SetInferenceMode(target_mode);
+  if (!switch_result.has_value()) {
+    spdlog::warn("Failed to switch inference mode: {}",
+                 app::AppErrorToString(switch_result.error()));
+    return;
+  }
+
+  app_config_.ai.inference_mode = target_mode;
+  spdlog::info("Inference mode switched to {}", app::InferenceModeToString(target_mode));
+
+  if (settings_window_ != nullptr && settings_window_->isVisible()) {
+    settings_window_->RefreshFromConfig(app_config_);
+  }
+
+  if (chat_bubble_ != nullptr) {
+    chat_bubble_->SetText(
+        QString::fromStdString("Inference mode: " + app::InferenceModeToString(target_mode)),
+        false);
+    chat_bubble_->Reposition(GetModelRectInView());
+  }
 }
 
 QRect DeskPetWindow::GetModelRectInView() const {
@@ -195,6 +233,9 @@ void DeskPetWindow::ApplyUpdatedConfig(const app::AppConfig& updated_config) {
   const app::AppConfig old_config = app_config_;
   app_config_ = updated_config;
   skin_config_ = app_config_.skin;
+  if (chat_service_ != nullptr) {
+    chat_service_->UpdateConfig(app_config_);
+  }
   performance_monitor_.SetEnabled(app_config_.debug.show_performance_metrics);
   performance_monitor_.SetRefreshIntervalMs(app_config_.debug.metrics_refresh_ms);
 
@@ -208,17 +249,31 @@ void DeskPetWindow::ApplyUpdatedConfig(const app::AppConfig& updated_config) {
     setWindowFlags(flags);
     show();
   }
+  ApplyWindowGeometryConfig();
 
   const bool skin_root_changed = old_config.skin.directory != app_config_.skin.directory;
   const bool skin_current_changed = old_config.skin.current != app_config_.skin.current;
   const bool live2d_enabled_changed =
       old_config.skin.enable_live2d != app_config_.skin.enable_live2d;
 
-  if (live2d_enabled_changed || skin_root_changed || skin_current_changed) {
+  if (!skin_config_.enable_live2d) {
     EnsureLive2dViewInitialized();
+  } else if (live2d_enabled_changed || live2d_renderer_ == nullptr || !live2d_renderer_->IsReady()) {
+    EnsureLive2dViewInitialized();
+  } else if (skin_root_changed || skin_current_changed) {
+    auto switch_result = live2d_renderer_->SwitchSkin(BuildCurrentModelDirectory());
+    if (!switch_result.has_value()) {
+      spdlog::warn("Live2D skin switch from settings failed: {}",
+                   app::AppErrorToString(switch_result.error()));
+    } else if (live2d_canvas_ != nullptr) {
+      live2d_canvas_->update();
+    }
   }
   ApplyLive2dBehaviorConfig();
   available_skin_directories_ = DiscoverAvailableSkins();
+  if (chat_bubble_ != nullptr && chat_bubble_->isVisible()) {
+    chat_bubble_->Reposition(GetModelRectInView());
+  }
 }
 
 void DeskPetWindow::ApplyLive2dBehaviorConfig() {
@@ -230,6 +285,23 @@ void DeskPetWindow::ApplyLive2dBehaviorConfig() {
   live2d_renderer_->SetIdleMotionGroup(skin_config_.idle_motion_group);
   live2d_renderer_->SetIdleIntervalSeconds(skin_config_.idle_interval_seconds);
   live2d_renderer_->SetModelRenderSize(skin_config_.model_width_px, skin_config_.model_height_px);
+}
+
+void DeskPetWindow::ApplyWindowGeometryConfig() {
+  int target_width = std::clamp(app_config_.window.width, kMinModelDimensionPx, kMaxModelDimensionPx);
+  int target_height =
+      std::clamp(app_config_.window.height, kMinModelDimensionPx, kMaxModelDimensionPx);
+
+  if (app_config_.window.auto_fit_model_rect) {
+    const int padding = std::clamp(app_config_.window.min_model_window_padding_px, 0, 64);
+    target_width = std::clamp(skin_config_.model_width_px + (padding * 2), kMinModelDimensionPx,
+                              kMaxModelDimensionPx);
+    target_height = std::clamp(skin_config_.model_height_px + (padding * 2), kMinModelDimensionPx,
+                               kMaxModelDimensionPx);
+  }
+
+  setFixedSize(target_width, target_height);
+  setWindowOpacity(std::clamp(app_config_.window.opacity, 0.1F, 1.0F));
 }
 
 void DeskPetWindow::EnsureLive2dViewInitialized() {
@@ -282,6 +354,13 @@ void DeskPetWindow::ReloadCurrentSkin() {
     return;
   }
   ApplyLive2dBehaviorConfig();
+  ApplyWindowGeometryConfig();
+  if (live2d_canvas_ != nullptr) {
+    live2d_canvas_->update();
+  }
+  if (chat_bubble_ != nullptr && chat_bubble_->isVisible()) {
+    chat_bubble_->Reposition(GetModelRectInView());
+  }
   spdlog::info("Live2D skin reloaded: {}", model_directory.string());
 }
 
@@ -366,6 +445,13 @@ void DeskPetWindow::SwitchSkinByOffset(int offset) {
   }
   app_config_.skin.current = skin_config_.current;
   ApplyLive2dBehaviorConfig();
+  ApplyWindowGeometryConfig();
+  if (live2d_canvas_ != nullptr) {
+    live2d_canvas_->update();
+  }
+  if (chat_bubble_ != nullptr && chat_bubble_->isVisible()) {
+    chat_bubble_->Reposition(GetModelRectInView());
+  }
 
   spdlog::info("Live2D skin switched to {} (Ctrl+Shift+N/Ctrl+Shift+P)", target_directory.string());
 }
@@ -399,6 +485,9 @@ void DeskPetWindow::mouseMoveEvent(QMouseEvent* event) {
   }
 
   UpdatePointerFromCursor();
+  if (chat_bubble_ != nullptr && chat_bubble_->isVisible()) {
+    chat_bubble_->Reposition(GetModelRectInView());
+  }
 
   QWidget::mouseMoveEvent(event);
 }
@@ -452,6 +541,13 @@ void DeskPetWindow::keyPressEvent(QKeyEvent* event) {
 
   if (event->key() == Qt::Key_Comma && event->modifiers().testFlag(Qt::ControlModifier)) {
     ShowSettingsWindow();
+    event->accept();
+    return;
+  }
+
+  if (event->key() == Qt::Key_I && event->modifiers().testFlag(Qt::ControlModifier) &&
+      event->modifiers().testFlag(Qt::ShiftModifier)) {
+    ToggleInferenceMode();
     event->accept();
     return;
   }

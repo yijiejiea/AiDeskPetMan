@@ -1,52 +1,65 @@
 {
-  "ai": {
-    "api_base_url": "https://api.openai.com/v1",
-    "api_model": "gpt-4o-mini",
-    "inference_mode": "token_api",
-    "local_model_path": "assets/models"
-  },
-  "crash": {
-    "dump_directory": "logs",
-    "dump_type": "normal",
-    "enable_handler": true,
-    "write_minidump": true
-  },
-  "debug": {
-    "crash_test": false,
-    "enabled": false,
-    "metrics_refresh_ms": 1000,
-    "show_performance_metrics": true,
-    "smoke_test_seconds": 0
+  "window": {
+    "width": 400,
+    "height": 600,
+    "idle_fps": 30,
+    "interactive_fps": 60,
+    "opacity": 1.0,
+    "always_on_top": true,
+    "enable_window": true,
+    "auto_fit_model_rect": true,
+    "min_model_window_padding_px": 0
   },
   "log": {
     "debug_mode": false,
+    "log_level": "info",
     "log_directory": "logs",
     "log_file_name": "mikudesk.log",
-    "log_level": "info",
-    "max_file_count": 5,
-    "max_file_size_mb": 10
+    "max_file_size_mb": 10,
+    "max_file_count": 5
+  },
+  "crash": {
+    "enable_handler": true,
+    "write_minidump": true,
+    "dump_type": "normal",
+    "dump_directory": "logs"
   },
   "security": {
     "encrypted_api_key": ""
   },
   "skin": {
-    "current": "miku/runtime",
     "directory": "assets/skins",
+    "current": "miku/runtime",
+    "enable_live2d": true,
     "enable_eye_tracking": true,
     "enable_idle_animation": true,
-    "enable_live2d": true,
-    "idle_interval_seconds": 10,
     "idle_motion_group": "Idle",
-    "model_height_px": 560,
-    "model_width_px": 300
+    "idle_interval_seconds": 10,
+    "model_width_px": 300,
+    "model_height_px": 560
   },
-  "window": {
-    "always_on_top": true,
-    "enable_window": true,
-    "height": 600,
-    "idle_fps": 30,
-    "interactive_fps": 60,
-    "opacity": 1.0,
-    "width": 400
+  "ai": {
+    "inference_mode": "token_api",
+    "provider": "openai",
+    "api_base_url": "https://api.openai.com/v1",
+    "api_model": "gpt-4o-mini",
+    "stream": true,
+    "request_timeout_ms": 60000,
+    "max_tokens": 1024,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "system_prompt": "You are the MikuDesk desktop assistant.",
+    "context_rounds": 10,
+    "local_model_path": "assets/models",
+    "local_gpu_layers": 0,
+    "local_threads": 8,
+    "local_context_length": 4096
+  },
+  "debug": {
+    "enabled": false,
+    "smoke_test_seconds": 0,
+    "crash_test": false,
+    "show_performance_metrics": true,
+    "metrics_refresh_ms": 1000
   }
 }

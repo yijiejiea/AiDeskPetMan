@@ -1,10 +1,10 @@
 #include "ui/settings_window.hpp"
 
-#include <QComboBox>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QFileDialog>
 #include <QMessageBox>
-#include <QString>
+#include <QPushButton>
 #include <QSpinBox>
 #include <QVariant>
 
@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <system_error>
 
+#include "security/dpapi_secret_store.hpp"
 #include "spdlog/spdlog.h"
 #include "ui_settings_window.h"
 
@@ -24,6 +25,8 @@ constexpr int kMinMetricsRefreshMs = 250;
 constexpr int kMaxMetricsRefreshMs = 10000;
 constexpr int kMinModelDimensionPx = 64;
 constexpr int kMaxModelDimensionPx = 4096;
+constexpr int kMinWindowPaddingPx = 0;
+constexpr int kMaxWindowPaddingPx = 64;
 
 std::filesystem::path NormalizePath(const std::filesystem::path& path) {
   std::error_code error_code;
@@ -54,12 +57,10 @@ bool ContainsModel3JsonInDirectory(const std::filesystem::path& directory_path) 
     if (!entry.is_regular_file(error_code)) {
       continue;
     }
-    const std::string file_name = entry.path().filename().string();
-    if (file_name.ends_with(".model3.json")) {
+    if (entry.path().filename().string().ends_with(".model3.json")) {
       return true;
     }
   }
-
   return false;
 }
 
@@ -96,6 +97,36 @@ int ComboIndexFromInferenceMode(app::InferenceMode mode) {
     return 1;
   }
   return 0;
+}
+
+app::AiProvider AiProviderFromComboIndex(int combo_index) {
+  if (combo_index == 1) {
+    return app::AiProvider::kDeepSeek;
+  }
+  if (combo_index == 2) {
+    return app::AiProvider::kCustom;
+  }
+  return app::AiProvider::kOpenAi;
+}
+
+int ComboIndexFromAiProvider(app::AiProvider provider) {
+  if (provider == app::AiProvider::kDeepSeek) {
+    return 1;
+  }
+  if (provider == app::AiProvider::kCustom) {
+    return 2;
+  }
+  return 0;
+}
+
+std::string DefaultApiBaseForProvider(app::AiProvider provider) {
+  if (provider == app::AiProvider::kDeepSeek) {
+    return "https://api.deepseek.com/v1";
+  }
+  if (provider == app::AiProvider::kCustom) {
+    return "";
+  }
+  return "https://api.openai.com/v1";
 }
 
 }  // namespace
@@ -188,6 +219,21 @@ void SettingsWindow::InitializeSignals() {
             UpdateAiControlState();
           });
 
+  connect(ui_->provider_combo_box, qOverload<int>(&QComboBox::currentIndexChanged), this,
+          [this](int combo_index) {
+            if (updating_ui_) {
+              return;
+            }
+            const app::AiProvider provider = AiProviderFromComboIndex(combo_index);
+            if (provider == app::AiProvider::kCustom) {
+              return;
+            }
+            if (ui_->api_base_url_line_edit->text().trimmed().isEmpty()) {
+              ui_->api_base_url_line_edit->setText(
+                  QString::fromStdString(DefaultApiBaseForProvider(provider)));
+            }
+          });
+
   connect(ui_->show_performance_metrics_check_box, &QCheckBox::toggled, this,
           [this](bool /*checked*/) {
             if (updating_ui_) {
@@ -207,6 +253,13 @@ void SettingsWindow::InitializeSignals() {
               performance_timer_.start();
             }
           });
+
+  connect(ui_->auto_fit_model_rect_check_box, &QCheckBox::toggled, this, [this](bool checked) {
+    if (updating_ui_) {
+      return;
+    }
+    ui_->model_window_padding_spin_box->setEnabled(checked);
+  });
 }
 
 void SettingsWindow::PopulateUiFromConfig() {
@@ -222,16 +275,40 @@ void SettingsWindow::PopulateUiFromConfig() {
   ui_->model_height_spin_box->setValue(
       std::clamp(config_.skin.model_height_px, kMinModelDimensionPx, kMaxModelDimensionPx));
   ui_->always_on_top_check_box->setChecked(config_.window.always_on_top);
+  ui_->auto_fit_model_rect_check_box->setChecked(config_.window.auto_fit_model_rect);
+  ui_->model_window_padding_spin_box->setValue(
+      std::clamp(config_.window.min_model_window_padding_px, kMinWindowPaddingPx, kMaxWindowPaddingPx));
+  ui_->model_window_padding_spin_box->setEnabled(config_.window.auto_fit_model_rect);
 
   ui_->skin_root_line_edit->setText(QString::fromStdString(config_.skin.directory.generic_string()));
   RefreshSkinCandidates();
 
   ui_->inference_mode_combo_box->setCurrentIndex(ComboIndexFromInferenceMode(config_.ai.inference_mode));
+  ui_->provider_combo_box->setCurrentIndex(ComboIndexFromAiProvider(config_.ai.provider));
+  ui_->stream_enabled_check_box->setChecked(config_.ai.stream);
+  ui_->request_timeout_ms_spin_box->setValue(config_.ai.request_timeout_ms);
+  ui_->max_tokens_spin_box->setValue(config_.ai.max_tokens);
+  ui_->temperature_double_spin_box->setValue(config_.ai.temperature);
+  ui_->top_p_double_spin_box->setValue(config_.ai.top_p);
   ui_->api_base_url_line_edit->setText(QString::fromStdString(config_.ai.api_base_url));
   ui_->api_model_line_edit->setText(QString::fromStdString(config_.ai.api_model));
-  ui_->api_token_line_edit->setText(QString::fromStdString(config_.security.encrypted_api_key));
   ui_->local_model_path_line_edit->setText(
       QString::fromStdString(config_.ai.local_model_path.generic_string()));
+  ui_->local_gpu_layers_spin_box->setValue(config_.ai.local_gpu_layers);
+  ui_->local_threads_spin_box->setValue(config_.ai.local_threads);
+  ui_->local_context_length_spin_box->setValue(config_.ai.local_context_length);
+  ui_->context_rounds_spin_box->setValue(config_.ai.context_rounds);
+  ui_->system_prompt_plain_text_edit->setPlainText(QString::fromStdString(config_.ai.system_prompt));
+
+  {
+    security::DpapiSecretStore secret_store;
+    auto decrypted_token = secret_store.Decrypt(config_.security.encrypted_api_key);
+    if (decrypted_token.has_value()) {
+      ui_->api_token_line_edit->setText(QString::fromStdString(*decrypted_token));
+    } else {
+      ui_->api_token_line_edit->clear();
+    }
+  }
 
   ui_->debug_enabled_check_box->setChecked(config_.debug.enabled);
   ui_->show_performance_metrics_check_box->setChecked(config_.debug.show_performance_metrics);
@@ -258,10 +335,13 @@ void SettingsWindow::ReadUiToConfig() {
                                            kMaxModelDimensionPx);
   config_.skin.model_height_px =
       std::clamp(ui_->model_height_spin_box->value(), kMinModelDimensionPx, kMaxModelDimensionPx);
+
   config_.window.always_on_top = ui_->always_on_top_check_box->isChecked();
+  config_.window.auto_fit_model_rect = ui_->auto_fit_model_rect_check_box->isChecked();
+  config_.window.min_model_window_padding_px =
+      std::clamp(ui_->model_window_padding_spin_box->value(), kMinWindowPaddingPx, kMaxWindowPaddingPx);
 
   config_.skin.directory = ui_->skin_root_line_edit->text().trimmed().toStdString();
-
   const QVariant selected_skin = ui_->skin_selector_combo_box->currentData();
   if (selected_skin.isValid()) {
     config_.skin.current = selected_skin.toString().toStdString();
@@ -269,12 +349,35 @@ void SettingsWindow::ReadUiToConfig() {
     config_.skin.current = ui_->skin_selector_combo_box->currentText().toStdString();
   }
 
-  config_.ai.inference_mode =
-      InferenceModeFromComboIndex(ui_->inference_mode_combo_box->currentIndex());
+  config_.ai.inference_mode = InferenceModeFromComboIndex(ui_->inference_mode_combo_box->currentIndex());
+  config_.ai.provider = AiProviderFromComboIndex(ui_->provider_combo_box->currentIndex());
+  config_.ai.stream = ui_->stream_enabled_check_box->isChecked();
+  config_.ai.request_timeout_ms = ui_->request_timeout_ms_spin_box->value();
+  config_.ai.max_tokens = ui_->max_tokens_spin_box->value();
+  config_.ai.temperature = ui_->temperature_double_spin_box->value();
+  config_.ai.top_p = ui_->top_p_double_spin_box->value();
   config_.ai.api_base_url = ui_->api_base_url_line_edit->text().trimmed().toStdString();
   config_.ai.api_model = ui_->api_model_line_edit->text().trimmed().toStdString();
   config_.ai.local_model_path = ui_->local_model_path_line_edit->text().trimmed().toStdString();
-  config_.security.encrypted_api_key = ui_->api_token_line_edit->text().trimmed().toStdString();
+  config_.ai.local_gpu_layers = ui_->local_gpu_layers_spin_box->value();
+  config_.ai.local_threads = ui_->local_threads_spin_box->value();
+  config_.ai.local_context_length = ui_->local_context_length_spin_box->value();
+  config_.ai.context_rounds = ui_->context_rounds_spin_box->value();
+  config_.ai.system_prompt = ui_->system_prompt_plain_text_edit->toPlainText().trimmed().toStdString();
+
+  const std::string plain_api_token = ui_->api_token_line_edit->text().trimmed().toStdString();
+  if (plain_api_token.empty()) {
+    config_.security.encrypted_api_key.clear();
+  } else {
+    security::DpapiSecretStore secret_store;
+    auto encrypted_token = secret_store.Encrypt(plain_api_token);
+    if (encrypted_token.has_value()) {
+      config_.security.encrypted_api_key = *encrypted_token;
+    } else {
+      spdlog::warn("Failed to encrypt API token from settings. API token was cleared.");
+      config_.security.encrypted_api_key.clear();
+    }
+  }
 
   config_.debug.enabled = ui_->debug_enabled_check_box->isChecked();
   config_.debug.show_performance_metrics = ui_->show_performance_metrics_check_box->isChecked();
@@ -294,7 +397,7 @@ void SettingsWindow::RefreshSkinCandidates() {
   if (available_skin_directories_.empty()) {
     ui_->skin_selector_combo_box->addItem(QString::fromStdString(config_.skin.current),
                                           QString::fromStdString(config_.skin.current));
-    ui_->status_label->setText(QStringLiteral("未发现可用皮套目录（需包含 .model3.json）"));
+    ui_->status_label->setText(QStringLiteral("未发现可用皮套目录（需要包含 .model3.json）"));
     return;
   }
 
@@ -382,11 +485,16 @@ void SettingsWindow::ImportSkinDirectory() {
 
 void SettingsWindow::UpdateAiControlState() const {
   const bool use_local_model = ui_->inference_mode_combo_box->currentIndex() == 1;
+  ui_->provider_combo_box->setEnabled(!use_local_model);
   ui_->api_base_url_line_edit->setEnabled(!use_local_model);
   ui_->api_model_line_edit->setEnabled(!use_local_model);
   ui_->api_token_line_edit->setEnabled(!use_local_model);
+
   ui_->local_model_path_line_edit->setEnabled(use_local_model);
   ui_->browse_local_model_button->setEnabled(use_local_model);
+  ui_->local_gpu_layers_spin_box->setEnabled(use_local_model);
+  ui_->local_threads_spin_box->setEnabled(use_local_model);
+  ui_->local_context_length_spin_box->setEnabled(use_local_model);
 }
 
 void SettingsWindow::UpdatePerformanceSnapshotUi() {
@@ -426,8 +534,7 @@ void SettingsWindow::UpdatePerformanceTimerState() {
   }
 
   const int interval_ms =
-      std::clamp(ui_->metrics_refresh_ms_spin_box->value(), kMinMetricsRefreshMs,
-                 kMaxMetricsRefreshMs);
+      std::clamp(ui_->metrics_refresh_ms_spin_box->value(), kMinMetricsRefreshMs, kMaxMetricsRefreshMs);
   performance_timer_.setInterval(interval_ms);
   performance_timer_.start();
   UpdatePerformanceSnapshotUi();
@@ -496,3 +603,4 @@ std::vector<std::filesystem::path> SettingsWindow::DiscoverSkinDirectories() con
 }
 
 }  // namespace mikudesk::ui
+

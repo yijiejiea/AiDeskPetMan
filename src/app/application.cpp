@@ -11,6 +11,14 @@
 
 namespace mikudesk::app {
 
+#if !defined(MIKUDESK_ENABLE_LIVE2D)
+#define MIKUDESK_ENABLE_LIVE2D 0
+#endif
+
+#if !defined(MIKUDESK_ENABLE_LLAMA)
+#define MIKUDESK_ENABLE_LLAMA 0
+#endif
+
 Result<void> Application::Initialize(const std::filesystem::path& config_path, bool debug_mode,
                                      std::optional<DumpType> dump_type_override) {
   if (initialized_) {
@@ -51,6 +59,10 @@ Result<void> Application::Initialize(const std::filesystem::path& config_path, b
   if (!logger_result.has_value()) {
     return std::unexpected(logger_result.error());
   }
+
+  spdlog::info("Build feature flags: Live2D={}, Llama={}",
+               MIKUDESK_ENABLE_LIVE2D ? "ON" : "OFF",
+               MIKUDESK_ENABLE_LLAMA ? "ON" : "OFF");
 
   auto crash_result = diagnostics::CrashHandler::Install(config_.crash);
   if (!crash_result.has_value()) {

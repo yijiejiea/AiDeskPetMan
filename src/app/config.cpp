@@ -90,6 +90,29 @@ InferenceMode InferenceModeFromString(const std::string& value) {
   return InferenceMode::kTokenApi;
 }
 
+std::string AiProviderToString(AiProvider value) {
+  switch (value) {
+    case AiProvider::kOpenAi:
+      return "openai";
+    case AiProvider::kDeepSeek:
+      return "deepseek";
+    case AiProvider::kCustom:
+      return "custom";
+  }
+  return "openai";
+}
+
+AiProvider AiProviderFromString(const std::string& value) {
+  const std::string lowered = ToLower(value);
+  if (lowered == "deepseek") {
+    return AiProvider::kDeepSeek;
+  }
+  if (lowered == "custom") {
+    return AiProvider::kCustom;
+  }
+  return AiProvider::kOpenAi;
+}
+
 void to_json(nlohmann::json& json, const WindowConfig& config) {
   json = nlohmann::json{
       {"width", config.width},
@@ -99,6 +122,8 @@ void to_json(nlohmann::json& json, const WindowConfig& config) {
       {"opacity", config.opacity},
       {"always_on_top", config.always_on_top},
       {"enable_window", config.enable_window},
+      {"auto_fit_model_rect", config.auto_fit_model_rect},
+      {"min_model_window_padding_px", config.min_model_window_padding_px},
   };
 }
 
@@ -110,6 +135,9 @@ void from_json(const nlohmann::json& json, WindowConfig& config) {
   config.opacity = json.value("opacity", config.opacity);
   config.always_on_top = json.value("always_on_top", config.always_on_top);
   config.enable_window = json.value("enable_window", config.enable_window);
+  config.auto_fit_model_rect = json.value("auto_fit_model_rect", config.auto_fit_model_rect);
+  config.min_model_window_padding_px =
+      std::clamp(json.value("min_model_window_padding_px", config.min_model_window_padding_px), 0, 64);
 }
 
 void to_json(nlohmann::json& json, const LogConfig& config) {
@@ -188,18 +216,42 @@ void from_json(const nlohmann::json& json, SkinConfig& config) {
 void to_json(nlohmann::json& json, const AiConfig& config) {
   json = nlohmann::json{
       {"inference_mode", InferenceModeToString(config.inference_mode)},
+      {"provider", AiProviderToString(config.provider)},
       {"api_base_url", config.api_base_url},
       {"api_model", config.api_model},
+      {"stream", config.stream},
+      {"request_timeout_ms", config.request_timeout_ms},
+      {"max_tokens", config.max_tokens},
+      {"temperature", config.temperature},
+      {"top_p", config.top_p},
+      {"system_prompt", config.system_prompt},
+      {"context_rounds", config.context_rounds},
       {"local_model_path", config.local_model_path.string()},
+      {"local_gpu_layers", config.local_gpu_layers},
+      {"local_threads", config.local_threads},
+      {"local_context_length", config.local_context_length},
   };
 }
 
 void from_json(const nlohmann::json& json, AiConfig& config) {
   config.inference_mode =
       InferenceModeFromString(json.value("inference_mode", InferenceModeToString(config.inference_mode)));
+  config.provider = AiProviderFromString(json.value("provider", AiProviderToString(config.provider)));
   config.api_base_url = json.value("api_base_url", config.api_base_url);
   config.api_model = json.value("api_model", config.api_model);
+  config.stream = json.value("stream", config.stream);
+  config.request_timeout_ms = std::clamp(json.value("request_timeout_ms", config.request_timeout_ms),
+                                         1000, 300000);
+  config.max_tokens = std::clamp(json.value("max_tokens", config.max_tokens), 1, 32768);
+  config.temperature = std::clamp(json.value("temperature", config.temperature), 0.0, 2.0);
+  config.top_p = std::clamp(json.value("top_p", config.top_p), 0.0, 1.0);
+  config.system_prompt = json.value("system_prompt", config.system_prompt);
+  config.context_rounds = std::clamp(json.value("context_rounds", config.context_rounds), 1, 64);
   config.local_model_path = json.value("local_model_path", config.local_model_path.string());
+  config.local_gpu_layers = std::clamp(json.value("local_gpu_layers", config.local_gpu_layers), 0, 256);
+  config.local_threads = std::clamp(json.value("local_threads", config.local_threads), 1, 128);
+  config.local_context_length =
+      std::clamp(json.value("local_context_length", config.local_context_length), 256, 32768);
 }
 
 void to_json(nlohmann::json& json, const DebugConfig& config) {

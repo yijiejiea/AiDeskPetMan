@@ -6,6 +6,9 @@
     [ValidateSet("Auto", "On", "Off")]
     [string]$Live2D = "Auto",
     [switch]$EnableLive2D,
+    [ValidateSet("Auto", "On", "Off")]
+    [string]$Llama = "Auto",
+    [switch]$EnableLlama,
     [switch]$UseVcpkg
 )
 
@@ -52,6 +55,44 @@ function Resolve-Live2dEnabled {
     }
 }
 
+function Resolve-LlamaEnabled {
+    param(
+        [string]$LlamaMode,
+        [bool]$ForceEnable,
+        [string]$ScriptRoot
+    )
+
+    if ($ForceEnable -or $LlamaMode -eq "On") {
+        return $true
+    }
+    if ($LlamaMode -eq "Off") {
+        return $false
+    }
+
+    $config_path = Join-Path (Join-Path $ScriptRoot "..") "config\config.json"
+    $config_path = [System.IO.Path]::GetFullPath($config_path)
+    if (!(Test-Path $config_path)) {
+        Write-Host "Llama auto mode: config file not found, fallback OFF. path: $config_path"
+        return $false
+    }
+
+    try {
+        $config_text = Get-Content -Path $config_path -Raw -Encoding UTF8
+        $config_json = $config_text | ConvertFrom-Json
+        if ($null -ne $config_json.ai -and $null -ne $config_json.ai.inference_mode) {
+            $enabled = [string]$config_json.ai.inference_mode -eq "local_model"
+            Write-Host "Llama auto mode: config.ai.inference_mode=$($config_json.ai.inference_mode), enabled=$enabled"
+            return $enabled
+        }
+
+        Write-Host "Llama auto mode: ai.inference_mode missing, fallback OFF."
+        return $false
+    } catch {
+        Write-Warning "Llama auto mode: failed to parse $config_path, fallback OFF. error: $($_.Exception.Message)"
+        return $false
+    }
+}
+
 $vcvars_path = $script:VcvarsPath
 if (!(Test-Path $vcvars_path)) {
     throw "vcvars64.bat not found: $vcvars_path"
@@ -63,6 +104,8 @@ if (-not $DepsRoot) {
 
 $live2d_enabled = Resolve-Live2dEnabled -Live2DMode $Live2D -ForceEnable:$EnableLive2D -ScriptRoot $script_root
 $live2d_value = if ($live2d_enabled) { "ON" } else { "OFF" }
+$llama_enabled = Resolve-LlamaEnabled -LlamaMode $Llama -ForceEnable:$EnableLlama -ScriptRoot $script_root
+$llama_value = if ($llama_enabled) { "ON" } else { "OFF" }
 
 if (-not $CubismSdkPath) {
     $CubismSdkPath = $script:DefaultCubismSdkRoot
@@ -91,6 +134,7 @@ if ($UseVcpkg) {
     $extraArgs += "-DCMAKE_TOOLCHAIN_FILE=`"$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake`""
 }
 $extraArgs += "-DMIKUDESK_ENABLE_LIVE2D=$live2d_value"
+$extraArgs += "-DMIKUDESK_ENABLE_LLAMA=$llama_value"
 if ($cubism_exists) {
     $extraArgs += "-DMIKUDESK_CUBISM_SDK_PATH=`"$CubismSdkPath`""
 }
@@ -111,9 +155,30 @@ $preset = if ($Config -eq "Debug") { $script:DebugPreset } else { $script:Releas
 $extraText = if ($extraArgs.Count -gt 0) { " " + ($extraArgs -join " ") } else { "" }
 $command = "call `"$vcvars_path`" && cmake --fresh --preset $preset$extraText && cmake --build --preset $preset"
 
-cmd /c $command
-if ($LASTEXITCODE -ne 0) {
-    throw "Build failed with exit code $LASTEXITCODE"
+${stdout_file} = [System.IO.Path]::GetTempFileName()
+${stderr_file} = [System.IO.Path]::GetTempFileName()
+try {
+    $process = Start-Process -FilePath "cmd.exe" `
+        -ArgumentList "/c", $command `
+        -NoNewWindow `
+        -Wait `
+        -PassThru `
+        -RedirectStandardOutput $stdout_file `
+        -RedirectStandardError $stderr_file
+
+    if (Test-Path $stdout_file) {
+        Get-Content $stdout_file | ForEach-Object { Write-Host $_ }
+    }
+    if (Test-Path $stderr_file) {
+        Get-Content $stderr_file | ForEach-Object { Write-Host $_ }
+    }
+
+    if ($process.ExitCode -ne 0) {
+        throw "Build failed with exit code $($process.ExitCode)"
+    }
+}
+finally {
+    Remove-Item $stdout_file, $stderr_file -ErrorAction SilentlyContinue
 }
 
 Write-Host "Build succeeded with preset: $preset"

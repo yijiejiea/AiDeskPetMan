@@ -42,6 +42,23 @@ int main() {
     if (!Expect(result->window.width == 400, "default width should be 400")) {
       return 1;
     }
+    if (!Expect(result->window.auto_fit_model_rect, "default window auto-fit should be true")) {
+      return 1;
+    }
+    if (!Expect(result->window.min_model_window_padding_px == 0,
+                "default window model padding should be 0")) {
+      return 1;
+    }
+    if (!Expect(result->ai.provider == mikudesk::app::AiProvider::kOpenAi,
+                "default AI provider should be openai")) {
+      return 1;
+    }
+    if (!Expect(result->ai.stream, "default AI stream should be true")) {
+      return 1;
+    }
+    if (!Expect(result->ai.context_rounds == 10, "default AI context rounds should be 10")) {
+      return 1;
+    }
   }
 
   {
@@ -60,6 +77,8 @@ int main() {
     mikudesk::app::AppConfig write_config;
     write_config.window.width = 1024;
     write_config.window.height = 768;
+    write_config.window.auto_fit_model_rect = true;
+    write_config.window.min_model_window_padding_px = 12;
     write_config.log.log_file_name = "roundtrip.log";
     write_config.security.encrypted_api_key = "abc";
     write_config.skin.directory = "assets/skins";
@@ -72,9 +91,20 @@ int main() {
     write_config.skin.model_width_px = 280;
     write_config.skin.model_height_px = 520;
     write_config.ai.inference_mode = mikudesk::app::InferenceMode::kLocalModel;
+    write_config.ai.provider = mikudesk::app::AiProvider::kDeepSeek;
     write_config.ai.api_base_url = "https://api.openai.com/v1";
     write_config.ai.api_model = "gpt-4o-mini";
+    write_config.ai.stream = true;
+    write_config.ai.request_timeout_ms = 45000;
+    write_config.ai.max_tokens = 2048;
+    write_config.ai.temperature = 0.6;
+    write_config.ai.top_p = 0.95;
+    write_config.ai.system_prompt = "You are MikuDesk.";
+    write_config.ai.context_rounds = 16;
     write_config.ai.local_model_path = "assets/models/qwen.gguf";
+    write_config.ai.local_gpu_layers = 35;
+    write_config.ai.local_threads = 12;
+    write_config.ai.local_context_length = 8192;
     write_config.debug.enabled = true;
     write_config.debug.show_performance_metrics = false;
     write_config.debug.metrics_refresh_ms = 1500;
@@ -93,6 +123,15 @@ int main() {
     }
     if (!Expect(read_result->window.height == write_config.window.height,
                 "roundtrip height mismatch")) {
+      return 1;
+    }
+    if (!Expect(read_result->window.auto_fit_model_rect == write_config.window.auto_fit_model_rect,
+                "roundtrip window auto-fit mismatch")) {
+      return 1;
+    }
+    if (!Expect(read_result->window.min_model_window_padding_px ==
+                    write_config.window.min_model_window_padding_px,
+                "roundtrip window model padding mismatch")) {
       return 1;
     }
     if (!Expect(read_result->log.log_file_name == write_config.log.log_file_name,
@@ -130,8 +169,51 @@ int main() {
                 "roundtrip inference mode mismatch")) {
       return 1;
     }
+    if (!Expect(read_result->ai.provider == write_config.ai.provider,
+                "roundtrip AI provider mismatch")) {
+      return 1;
+    }
+    if (!Expect(read_result->ai.stream == write_config.ai.stream, "roundtrip AI stream mismatch")) {
+      return 1;
+    }
+    if (!Expect(read_result->ai.request_timeout_ms == write_config.ai.request_timeout_ms,
+                "roundtrip AI timeout mismatch")) {
+      return 1;
+    }
+    if (!Expect(read_result->ai.max_tokens == write_config.ai.max_tokens,
+                "roundtrip AI max tokens mismatch")) {
+      return 1;
+    }
+    if (!Expect(read_result->ai.temperature == write_config.ai.temperature,
+                "roundtrip AI temperature mismatch")) {
+      return 1;
+    }
+    if (!Expect(read_result->ai.top_p == write_config.ai.top_p,
+                "roundtrip AI top_p mismatch")) {
+      return 1;
+    }
+    if (!Expect(read_result->ai.system_prompt == write_config.ai.system_prompt,
+                "roundtrip AI system prompt mismatch")) {
+      return 1;
+    }
+    if (!Expect(read_result->ai.context_rounds == write_config.ai.context_rounds,
+                "roundtrip AI context rounds mismatch")) {
+      return 1;
+    }
     if (!Expect(read_result->ai.local_model_path == write_config.ai.local_model_path,
                 "roundtrip local model path mismatch")) {
+      return 1;
+    }
+    if (!Expect(read_result->ai.local_gpu_layers == write_config.ai.local_gpu_layers,
+                "roundtrip local gpu layers mismatch")) {
+      return 1;
+    }
+    if (!Expect(read_result->ai.local_threads == write_config.ai.local_threads,
+                "roundtrip local threads mismatch")) {
+      return 1;
+    }
+    if (!Expect(read_result->ai.local_context_length == write_config.ai.local_context_length,
+                "roundtrip local context length mismatch")) {
       return 1;
     }
     if (!Expect(read_result->debug.enabled == write_config.debug.enabled,

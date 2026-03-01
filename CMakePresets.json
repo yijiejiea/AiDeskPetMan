@@ -25,6 +25,24 @@
       "name": "insiders-release",
       "displayName": "VS2026 Insiders Release",
       "inherits": "base"
+    },
+    {
+      "name": "insiders-debug-ai",
+      "displayName": "VS2026 Insiders Debug (Live2D+Llama)",
+      "inherits": "base",
+      "cacheVariables": {
+        "MIKUDESK_ENABLE_LIVE2D": "ON",
+        "MIKUDESK_ENABLE_LLAMA": "ON"
+      }
+    },
+    {
+      "name": "insiders-release-ai",
+      "displayName": "VS2026 Insiders Release (Live2D+Llama)",
+      "inherits": "base",
+      "cacheVariables": {
+        "MIKUDESK_ENABLE_LIVE2D": "ON",
+        "MIKUDESK_ENABLE_LLAMA": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -36,6 +54,16 @@
     {
       "name": "insiders-release",
       "configurePreset": "insiders-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "insiders-debug-ai",
+      "configurePreset": "insiders-debug-ai",
+      "configuration": "Debug"
+    },
+    {
+      "name": "insiders-release-ai",
+      "configurePreset": "insiders-release-ai",
       "configuration": "Release"
     }
   ],

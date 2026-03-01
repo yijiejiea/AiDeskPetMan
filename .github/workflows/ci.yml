@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  windows-build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Install LLVM
+        shell: powershell
+        run: choco install llvm -y
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+
+      - name: Export vcpkg root
+        shell: powershell
+        run: |
+          if (-not $env:VCPKG_INSTALLATION_ROOT) {
+            throw "VCPKG_INSTALLATION_ROOT is not set by run-vcpkg action."
+          }
+          "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Configure
+        shell: powershell
+        run: cmake --preset insiders-debug -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
+
+      - name: Build
+        shell: powershell
+        run: cmake --build --preset insiders-debug
+
+      - name: Run tests
+        shell: powershell
+        run: ctest --preset insiders-debug --output-on-failure -LE integration
+
+      - name: clang-format check
+        shell: powershell
+        run: |
+          $files = Get-ChildItem -Recurse src,tests -Include *.hpp,*.cpp
+          foreach ($file in $files) {
+            clang-format --dry-run --Werror $file.FullName
+          }
+
+      - name: clang-tidy check
+        shell: powershell
+        run: |
+          $checks = @(
+            "src/app/application.cpp",
+            "src/app/config.cpp",
+            "src/core/scheduler.cpp",
+            "src/diagnostics/logger.cpp",
+            "src/diagnostics/crash_handler.cpp",
+            "src/window/window_manager.cpp"
+          )
+          foreach ($file in $checks) {
+            clang-tidy $file --config-file=.clang-tidy -- -std=c++23 -Isrc
+          }

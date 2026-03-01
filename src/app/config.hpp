@@ -27,6 +27,12 @@ enum class InferenceMode : std::uint8_t {
   kLocalModel,
 };
 
+enum class AiProvider : std::uint8_t {
+  kOpenAi,
+  kDeepSeek,
+  kCustom,
+};
+
 struct WindowConfig {
   int width = 400;
   int height = 600;
@@ -35,6 +41,8 @@ struct WindowConfig {
   float opacity = 1.0F;
   bool always_on_top = true;
   bool enable_window = true;
+  bool auto_fit_model_rect = true;
+  int min_model_window_padding_px = 0;
 };
 
 struct LogConfig {
@@ -71,9 +79,20 @@ struct SkinConfig {
 
 struct AiConfig {
   InferenceMode inference_mode = InferenceMode::kTokenApi;
+  AiProvider provider = AiProvider::kOpenAi;
   std::string api_base_url = "https://api.openai.com/v1";
   std::string api_model = "gpt-4o-mini";
+  bool stream = true;
+  int request_timeout_ms = 60000;
+  int max_tokens = 1024;
+  double temperature = 0.7;
+  double top_p = 0.9;
+  std::string system_prompt = "你是 MikuDesk 桌面助手。";
+  int context_rounds = 10;
   std::filesystem::path local_model_path = "assets/models";
+  int local_gpu_layers = 0;
+  int local_threads = 8;
+  int local_context_length = 4096;
 };
 
 struct DebugConfig {
@@ -100,6 +119,8 @@ std::string DumpTypeToString(DumpType value);
 DumpType DumpTypeFromString(const std::string& value);
 std::string InferenceModeToString(InferenceMode value);
 InferenceMode InferenceModeFromString(const std::string& value);
+std::string AiProviderToString(AiProvider value);
+AiProvider AiProviderFromString(const std::string& value);
 
 void to_json(nlohmann::json& json, const WindowConfig& config);
 void from_json(const nlohmann::json& json, WindowConfig& config);

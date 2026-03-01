@@ -11,6 +11,7 @@
 #include <QElapsedTimer>
 #include <QWidget>
 
+#include "ai/chat_service.hpp"
 #include "app/config.hpp"
 #include "diagnostics/performance_monitor.hpp"
 #include "renderer/live2d_renderer.hpp"
@@ -24,6 +25,7 @@ class Live2DCanvas;
 }
 
 namespace mikudesk::ui {
+class ChatBubble;
 class SettingsWindow;
 }
 
@@ -41,10 +43,11 @@ class DeskPetWindow final : public QWidget {
 
   void AdvanceFrame();
   void ShowSettingsWindow();
+  void ToggleInferenceMode();
 
  protected:
   void mousePressEvent(QMouseEvent* event) override;
- void mouseMoveEvent(QMouseEvent* event) override;
+  void mouseMoveEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
   void keyPressEvent(QKeyEvent* event) override;
   void closeEvent(QCloseEvent* event) override;
@@ -55,6 +58,7 @@ class DeskPetWindow final : public QWidget {
   void UpdatePointerFromCursor();
   void ApplyUpdatedConfig(const app::AppConfig& updated_config);
   void ApplyLive2dBehaviorConfig();
+  void ApplyWindowGeometryConfig();
   void EnsureLive2dViewInitialized();
   std::filesystem::path BuildCurrentModelDirectory() const;
   void ReloadCurrentSkin();
@@ -64,9 +68,11 @@ class DeskPetWindow final : public QWidget {
   std::unique_ptr<Ui::DeskPetWindow> ui_;
   std::function<void()> on_close_;
   app::AppConfig app_config_;
+  std::unique_ptr<ai::ChatService> chat_service_;
   std::filesystem::path config_path_;
   app::SkinConfig skin_config_;
   std::vector<std::filesystem::path> available_skin_directories_;
+  std::unique_ptr<ui::ChatBubble> chat_bubble_;
   std::unique_ptr<ui::SettingsWindow> settings_window_;
   std::unique_ptr<renderer::Live2DRenderer> live2d_renderer_;
   diagnostics::PerformanceMonitor performance_monitor_;

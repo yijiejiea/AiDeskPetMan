@@ -5,6 +5,9 @@ param(
     [ValidateSet("Auto", "On", "Off")]
     [string]$Live2D = "Auto",
     [switch]$EnableLive2D,
+    [ValidateSet("Auto", "On", "Off")]
+    [string]$Llama = "Auto",
+    [switch]$EnableLlama,
     [switch]$UseVcpkg,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$AppArgs
@@ -21,6 +24,8 @@ Get-Process -Name "mikudesk" -ErrorAction SilentlyContinue | Stop-Process -Force
     -Config $Config `
     -Live2D $Live2D `
     -EnableLive2D:$EnableLive2D `
+    -Llama $Llama `
+    -EnableLlama:$EnableLlama `
     -CubismSdkPath $CubismSdkPath `
     -UseVcpkg:$UseVcpkg
 if ($LASTEXITCODE -ne 0) {

@@ -20,6 +20,15 @@ enum class AppError {
   kLive2dModelNotFound,
   kLive2dLoadFailed,
   kLive2dRenderFailed,
+  kAiEngineNotReady,
+  kAiRequestFailed,
+  kAiSseParseFailed,
+  kAiContextInvalid,
+  kLlamaNotEnabled,
+  kLlamaLoadFailed,
+  kLlamaInferenceFailed,
+  kApiKeyMissing,
+  kApiKeyDecryptFailed,
 };
 
 template <typename T>
@@ -55,6 +64,24 @@ inline std::string_view AppErrorToString(AppError error) {
       return "Live2D load failed";
     case AppError::kLive2dRenderFailed:
       return "Live2D render failed";
+    case AppError::kAiEngineNotReady:
+      return "AI engine is not ready";
+    case AppError::kAiRequestFailed:
+      return "AI request failed";
+    case AppError::kAiSseParseFailed:
+      return "AI SSE parse failed";
+    case AppError::kAiContextInvalid:
+      return "AI context is invalid";
+    case AppError::kLlamaNotEnabled:
+      return "llama.cpp is not enabled";
+    case AppError::kLlamaLoadFailed:
+      return "llama.cpp model load failed";
+    case AppError::kLlamaInferenceFailed:
+      return "llama.cpp inference failed";
+    case AppError::kApiKeyMissing:
+      return "API key is missing";
+    case AppError::kApiKeyDecryptFailed:
+      return "API key decrypt failed";
   }
   return "unknown error";
 }

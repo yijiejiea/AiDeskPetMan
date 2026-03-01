@@ -1,15 +1,13 @@
 #include "window/window_manager.hpp"
 
+#include <QAction>
 #include <QCoreApplication>
-#include <QApplication>
+#include <QFont>
 #include <QIcon>
 #include <QMenu>
-#include <QFont>
-#include <QPixmap>
-#include <QStyle>
-#include <QSystemTrayIcon>
-#include <QColor>
 #include <QPainter>
+#include <QPixmap>
+#include <QSystemTrayIcon>
 
 #include <utility>
 
@@ -39,7 +37,7 @@ app::Result<void> WindowManager::Create(const app::AppConfig& config,
   auto on_close = [this]() { running_ = false; };
   window_ = std::make_unique<DeskPetWindow>(config, config_path, std::move(on_close));
   window_->move(120, 120);
-  window_->show();
+  window_->showNormal();
   window_->raise();
   window_->activateWindow();
   window_->setFocus();
@@ -63,7 +61,6 @@ void WindowManager::EnsureTrayIcon() {
   tray_icon_ = std::make_unique<QSystemTrayIcon>();
   tray_menu_ = std::make_unique<QMenu>();
 
-  // Use an app-specific tray icon so it is easy to identify in Windows tray.
   QPixmap pixmap(32, 32);
   pixmap.fill(Qt::transparent);
   QPainter painter(&pixmap);
@@ -78,38 +75,43 @@ void WindowManager::EnsureTrayIcon() {
   painter.setPen(Qt::white);
   painter.drawText(pixmap.rect(), Qt::AlignCenter, "M");
   painter.end();
-  QIcon tray_icon(pixmap);
-  tray_icon_->setIcon(tray_icon);
+  tray_icon_->setIcon(QIcon(pixmap));
   tray_icon_->setToolTip("MikuDesk");
 
-  QAction* open_settings_action = tray_menu_->addAction("打开设置");
-  QAction* show_window_action = tray_menu_->addAction("显示主窗口");
-  QAction* hide_window_action = tray_menu_->addAction("隐藏主窗口");
+  QAction* open_settings_action = tray_menu_->addAction(QStringLiteral("打开设置"));
+  QAction* show_window_action = tray_menu_->addAction(QStringLiteral("显示主窗口"));
+  QAction* hide_window_action = tray_menu_->addAction(QStringLiteral("隐藏主窗口"));
+  QAction* toggle_engine_action =
+      tray_menu_->addAction(QStringLiteral("切换推理引擎（云端/本地）"));
   tray_menu_->addSeparator();
-  QAction* exit_action = tray_menu_->addAction("退出");
+  QAction* exit_action = tray_menu_->addAction(QStringLiteral("退出"));
 
   QObject::connect(open_settings_action, &QAction::triggered, [this]() {
-    if (window_ == nullptr) {
-      return;
+    if (window_ != nullptr) {
+      window_->ShowSettingsWindow();
     }
-    window_->ShowSettingsWindow();
   });
 
   QObject::connect(show_window_action, &QAction::triggered, [this]() {
     if (window_ == nullptr) {
       return;
     }
-    window_->show();
+    window_->showNormal();
     window_->raise();
     window_->activateWindow();
     window_->setFocus();
   });
 
   QObject::connect(hide_window_action, &QAction::triggered, [this]() {
-    if (window_ == nullptr) {
-      return;
+    if (window_ != nullptr) {
+      window_->hide();
     }
-    window_->hide();
+  });
+
+  QObject::connect(toggle_engine_action, &QAction::triggered, [this]() {
+    if (window_ != nullptr) {
+      window_->ToggleInferenceMode();
+    }
   });
 
   QObject::connect(exit_action, &QAction::triggered, [this]() {
@@ -128,7 +130,7 @@ void WindowManager::EnsureTrayIcon() {
                        if (window_->isVisible()) {
                          window_->hide();
                        } else {
-                         window_->show();
+                         window_->showNormal();
                          window_->raise();
                          window_->activateWindow();
                          window_->setFocus();

@@ -37,7 +37,11 @@ void Live2DCanvas::paintGL() {
       std::max(1, static_cast<int>(std::lround(static_cast<double>(height()) * pixel_ratio)));
 
   glViewport(0, 0, viewport_width, viewport_height);
+  glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
   if (renderer_ != nullptr) {
     renderer_->Render();

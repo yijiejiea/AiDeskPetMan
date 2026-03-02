@@ -1,4 +1,4 @@
-﻿#include "window/desk_pet_window.hpp"
+#include "window/desk_pet_window.hpp"
 
 #include <QCloseEvent>
 #include <QCursor>
@@ -311,7 +311,13 @@ void DeskPetWindow::ApplyUpdatedConfig(const app::AppConfig& updated_config) {
   } else if (live2d_enabled_changed || live2d_renderer_ == nullptr || !live2d_renderer_->IsReady()) {
     EnsureLive2dViewInitialized();
   } else if (skin_root_changed || skin_current_changed) {
+    if (live2d_canvas_ != nullptr) {
+      live2d_canvas_->makeCurrent();
+    }
     auto switch_result = live2d_renderer_->SwitchSkin(BuildCurrentModelDirectory());
+    if (live2d_canvas_ != nullptr) {
+      live2d_canvas_->doneCurrent();
+    }
     if (!switch_result.has_value()) {
       spdlog::warn("Live2D skin switch from settings failed: {}",
                    app::AppErrorToString(switch_result.error()));
@@ -502,7 +508,13 @@ void DeskPetWindow::EnsureLive2dViewInitialized() {
   ui_->live2d_view->setVisible(true);
 
 #if defined(MIKUDESK_ENABLE_LIVE2D) && MIKUDESK_ENABLE_LIVE2D
+  if (live2d_canvas_ != nullptr) {
+    live2d_canvas_->makeCurrent();
+  }
   auto init_result = live2d_renderer_->Initialize(skin_config_);
+  if (live2d_canvas_ != nullptr) {
+    live2d_canvas_->doneCurrent();
+  }
   if (!init_result.has_value()) {
     spdlog::warn("Live2D initialization failed: {}", app::AppErrorToString(init_result.error()));
     return;
@@ -532,7 +544,13 @@ void DeskPetWindow::ReloadCurrentSkin() {
     return;
   }
   const std::filesystem::path model_directory = BuildCurrentModelDirectory();
+  if (live2d_canvas_ != nullptr) {
+    live2d_canvas_->makeCurrent();
+  }
   auto reload_result = live2d_renderer_->SwitchSkin(model_directory);
+  if (live2d_canvas_ != nullptr) {
+    live2d_canvas_->doneCurrent();
+  }
   if (!reload_result.has_value()) {
     spdlog::warn("Live2D hot reload failed for {}: {}", model_directory.string(),
                  app::AppErrorToString(reload_result.error()));
@@ -612,7 +630,13 @@ void DeskPetWindow::SwitchSkinByOffset(int offset) {
 
   const std::filesystem::path target_directory =
       available_skin_directories_[static_cast<std::size_t>(next_index)];
+  if (live2d_canvas_ != nullptr) {
+    live2d_canvas_->makeCurrent();
+  }
   auto switch_result = live2d_renderer_->SwitchSkin(target_directory);
+  if (live2d_canvas_ != nullptr) {
+    live2d_canvas_->doneCurrent();
+  }
   if (!switch_result.has_value()) {
     spdlog::warn("Live2D skin switch failed for {}: {}", target_directory.string(),
                  app::AppErrorToString(switch_result.error()));

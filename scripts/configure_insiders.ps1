@@ -69,28 +69,21 @@ function Resolve-LlamaEnabled {
         return $false
     }
 
-    $config_path = Join-Path (Join-Path $ScriptRoot "..") "config\config.json"
-    $config_path = [System.IO.Path]::GetFullPath($config_path)
-    if (!(Test-Path $config_path)) {
-        Write-Host "Llama auto mode: config file not found, fallback OFF. path: $config_path"
-        return $false
-    }
+    $repo_root = [System.IO.Path]::GetFullPath((Join-Path $ScriptRoot ".."))
+    $llama_candidates = @(
+        [System.IO.Path]::GetFullPath((Join-Path $repo_root "third_party\llama.cpp")),
+        [System.IO.Path]::GetFullPath((Join-Path $repo_root "third_party\llama"))
+    )
 
-    try {
-        $config_text = Get-Content -Path $config_path -Raw -Encoding UTF8
-        $config_json = $config_text | ConvertFrom-Json
-        if ($null -ne $config_json.ai -and $null -ne $config_json.ai.inference_mode) {
-            $enabled = [string]$config_json.ai.inference_mode -eq "local_model"
-            Write-Host "Llama auto mode: config.ai.inference_mode=$($config_json.ai.inference_mode), enabled=$enabled"
-            return $enabled
+    foreach ($candidate in $llama_candidates) {
+        if (Test-Path (Join-Path $candidate "CMakeLists.txt")) {
+            Write-Host "Llama auto mode: detected source at $candidate, enabled=true"
+            return $true
         }
-
-        Write-Host "Llama auto mode: ai.inference_mode missing, fallback OFF."
-        return $false
-    } catch {
-        Write-Warning "Llama auto mode: failed to parse $config_path, fallback OFF. error: $($_.Exception.Message)"
-        return $false
     }
+
+    Write-Host "Llama auto mode: llama.cpp source not found under third_party, enabled=false"
+    return $false
 }
 
 $vcvars_path = $script:VcvarsPath

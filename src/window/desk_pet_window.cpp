@@ -1,20 +1,26 @@
-#include "window/desk_pet_window.hpp"
+﻿#include "window/desk_pet_window.hpp"
 
 #include <QCloseEvent>
 #include <QCursor>
 #include <QKeyEvent>
+#include <QMetaObject>
 #include <QMouseEvent>
 #include <QPoint>
 #include <QVBoxLayout>
 #include <Qt>
 
 #include <algorithm>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
 #include "renderer/live2d_canvas.hpp"
 #include "spdlog/spdlog.h"
 #include "ui/chat_bubble.hpp"
+#include "ui/chat_input_dialog.hpp"
 #include "ui/settings_window.hpp"
 #include "ui_desk_pet_window.h"
 
@@ -76,6 +82,46 @@ QRect BuildModelRect(int view_width, int view_height, int model_width_px, int mo
   return {origin_x, origin_y, clamped_width, clamped_height};
 }
 
+std::string FormatPerformanceSnapshot(const diagnostics::PerformanceSnapshot& snapshot) {
+  std::ostringstream stream;
+  stream.setf(std::ios::fixed);
+  stream << std::setprecision(1);
+  stream << "cpu=" << snapshot.cpu_process_percent << "%, gpu=";
+  if (snapshot.gpu_available && snapshot.gpu_process_percent >= 0.0) {
+    stream << snapshot.gpu_process_percent << "%";
+  } else {
+    stream << "N/A";
+  }
+  stream << ", ws=" << snapshot.process_working_set_bytes
+         << ", private=" << snapshot.process_private_bytes << ", gpu_mem=";
+  if (snapshot.gpu_available) {
+    stream << snapshot.process_gpu_dedicated_bytes;
+  } else {
+    stream << "N/A";
+  }
+  return stream.str();
+}
+
+QString BuildChatFailureMessage(app::AppError error) {
+  switch (error) {
+    case app::AppError::kLlamaNotEnabled:
+      return QStringLiteral(
+          "Local model unavailable: this exe was built without llama.cpp support.");
+    case app::AppError::kLlamaLoadFailed:
+      return QStringLiteral(
+          "Local model load failed: please use a GGUF model (.gguf), not safetensors.");
+    case app::AppError::kApiKeyMissing:
+      return QStringLiteral("Cloud mode API key is missing. Configure it in Settings.");
+    case app::AppError::kAiEngineNotReady:
+      return QStringLiteral(
+          "AI engine not ready. Check current mode and model/API key configuration.");
+    default:
+      break;
+  }
+
+  return QString::fromStdString("AI request failed: " + std::string(app::AppErrorToString(error)));
+}
+
 }  // namespace
 
 DeskPetWindow::DeskPetWindow(const app::AppConfig& app_config,
@@ -117,11 +163,15 @@ DeskPetWindow::DeskPetWindow(const app::AppConfig& app_config,
   EnsureLive2dViewInitialized();
   chat_bubble_ = std::make_unique<ui::ChatBubble>(this);
   chat_bubble_->hide();
+  chat_input_dialog_ = std::make_unique<ui::ChatInputDialog>(this);
+  chat_input_dialog_->SetSubmitHandler(
+      [this](QString text) { SubmitChatMessage(text.toStdString()); });
   settings_window_ = std::make_unique<ui::SettingsWindow>(
       app_config_, config_path_, [this](const app::AppConfig& updated_config) {
         ApplyUpdatedConfig(updated_config);
       },
-      [this]() { return performance_monitor_.GetSnapshot(); });
+      [this]() { return performance_monitor_.GetSnapshot(); },
+      [this]() { return BuildInferenceBackendStatusText(); });
 
   frame_timer_.start();
 }
@@ -302,6 +352,141 @@ void DeskPetWindow::ApplyWindowGeometryConfig() {
 
   setFixedSize(target_width, target_height);
   setWindowOpacity(std::clamp(app_config_.window.opacity, 0.1F, 1.0F));
+}
+
+void DeskPetWindow::ShowChatInputDialog() {
+  if (chat_input_dialog_ == nullptr) {
+    return;
+  }
+
+  const QRect model_rect = GetModelRectInView();
+  const QPoint anchor_local(model_rect.center().x(), model_rect.bottom());
+  const QPoint anchor_global = ui_->live2d_view->mapToGlobal(anchor_local);
+  chat_input_dialog_->ShowNear(anchor_global);
+}
+
+void DeskPetWindow::SubmitChatMessage(std::string user_message) {
+  if (chat_service_ == nullptr || chat_bubble_ == nullptr) {
+    return;
+  }
+
+  if (user_message.empty()) {
+    return;
+  }
+
+  if (chat_request_in_flight_) {
+    UpdateChatBubbleText(QStringLiteral("上一条消息还在处理中，请稍后。"), false);
+    return;
+  }
+
+  if (chat_worker_.joinable()) {
+    chat_worker_.request_stop();
+    chat_worker_.join();
+  }
+
+  const std::string backend_status_text = BuildInferenceBackendStatusText();
+  spdlog::info("Chat request begin: {}", backend_status_text);
+  LogInferencePerformanceSnapshot("before_request");
+
+  chat_request_in_flight_ = true;
+  UpdateChatBubbleText(QStringLiteral("思考中..."), true);
+
+  chat_worker_ = std::jthread([this, message = std::move(user_message),
+                               backend_status_text](std::stop_token stop_token) {
+    std::string streamed_reply;
+    auto last_stream_ui_update = std::chrono::steady_clock::now() - std::chrono::milliseconds(200);
+    auto reply_result = chat_service_->SendMessage(
+        message,
+        [this, &streamed_reply, &last_stream_ui_update](std::string_view chunk) {
+          streamed_reply.append(chunk.data(), chunk.size());
+          const auto now = std::chrono::steady_clock::now();
+          if (now - last_stream_ui_update < std::chrono::milliseconds(50)) {
+            return;
+          }
+          last_stream_ui_update = now;
+          const QString stream_text =
+              QString::fromUtf8(streamed_reply.data(), static_cast<int>(streamed_reply.size()));
+          QMetaObject::invokeMethod(
+              this,
+              [this, stream_text]() { UpdateChatBubbleText(stream_text, true); },
+              Qt::QueuedConnection);
+        },
+        stop_token);
+
+    if (stop_token.stop_requested()) {
+      QMetaObject::invokeMethod(this, [this]() { chat_request_in_flight_ = false; },
+                                Qt::QueuedConnection);
+      return;
+    }
+
+    if (!reply_result.has_value()) {
+      const app::AppError error = reply_result.error();
+      spdlog::warn("Chat request failed: {}, backend_status={}",
+                   app::AppErrorToString(error), backend_status_text);
+      LogInferencePerformanceSnapshot("after_request_failed");
+      const QString error_text = BuildChatFailureMessage(error);
+      QMetaObject::invokeMethod(
+          this,
+          [this, error_text]() {
+            chat_request_in_flight_ = false;
+            UpdateChatBubbleText(error_text, false);
+          },
+          Qt::QueuedConnection);
+      return;
+    }
+
+    if (streamed_reply.empty()) {
+      streamed_reply = reply_result->text;
+    }
+
+    spdlog::info("Chat request succeeded: backend_status={}", backend_status_text);
+    LogInferencePerformanceSnapshot("after_request_success");
+
+    const QString final_text =
+        QString::fromUtf8(streamed_reply.data(), static_cast<int>(streamed_reply.size()));
+    QMetaObject::invokeMethod(
+        this,
+        [this, final_text]() {
+          chat_request_in_flight_ = false;
+          UpdateChatBubbleText(final_text, false);
+        },
+        Qt::QueuedConnection);
+  });
+}
+
+std::string DeskPetWindow::BuildInferenceBackendStatusText() const {
+  if (chat_service_ == nullptr) {
+    return "mode=none, engine=none";
+  }
+
+  const app::InferenceMode mode = chat_service_->GetInferenceMode();
+  const std::string_view engine_name = chat_service_->GetCurrentEngineName();
+  std::string status = "mode=" + app::InferenceModeToString(mode) +
+                       ", engine=" + std::string(engine_name);
+  if (mode == app::InferenceMode::kLocalModel) {
+    status += ", local_gpu_layers=" + std::to_string(app_config_.ai.local_gpu_layers);
+    status += ", local_threads=" + std::to_string(app_config_.ai.local_threads);
+    status += ", local_ctx=" + std::to_string(app_config_.ai.local_context_length);
+  } else {
+    status += ", provider=" + app::AiProviderToString(app_config_.ai.provider);
+    status += ", model=" + app_config_.ai.api_model;
+  }
+  return status;
+}
+
+void DeskPetWindow::LogInferencePerformanceSnapshot(std::string_view stage) const {
+  const diagnostics::PerformanceSnapshot snapshot = performance_monitor_.GetSnapshot();
+  spdlog::info("Inference perf {}: {}", stage, FormatPerformanceSnapshot(snapshot));
+}
+
+void DeskPetWindow::UpdateChatBubbleText(const QString& text, bool streaming) {
+  if (chat_bubble_ == nullptr) {
+    return;
+  }
+
+  chat_bubble_->SetText(text, streaming);
+  chat_bubble_->Reposition(GetModelRectInView());
+  chat_bubble_->update();
 }
 
 void DeskPetWindow::EnsureLive2dViewInitialized() {
@@ -539,6 +724,13 @@ void DeskPetWindow::keyPressEvent(QKeyEvent* event) {
     return;
   }
 
+  if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) &&
+      event->modifiers().testFlag(Qt::ControlModifier)) {
+    ShowChatInputDialog();
+    event->accept();
+    return;
+  }
+
   if (event->key() == Qt::Key_Comma && event->modifiers().testFlag(Qt::ControlModifier)) {
     ShowSettingsWindow();
     event->accept();
@@ -556,6 +748,15 @@ void DeskPetWindow::keyPressEvent(QKeyEvent* event) {
 }
 
 void DeskPetWindow::closeEvent(QCloseEvent* event) {
+  if (chat_worker_.joinable()) {
+    chat_worker_.request_stop();
+  }
+  if (chat_input_dialog_ != nullptr) {
+    chat_input_dialog_->hide();
+  }
+  if (chat_bubble_ != nullptr) {
+    chat_bubble_->hide();
+  }
   if (settings_window_ != nullptr) {
     settings_window_->hide();
   }

@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include <QSurfaceFormat>
+
 namespace mikudesk::renderer {
 
 Live2DCanvas::Live2DCanvas(Live2DRenderer* renderer, QWidget* parent)
@@ -11,6 +13,12 @@ Live2DCanvas::Live2DCanvas(Live2DRenderer* renderer, QWidget* parent)
   setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);
   setAttribute(Qt::WA_OpaquePaintEvent, false);
   setAttribute(Qt::WA_TranslucentBackground, true);
+
+  QSurfaceFormat surface_format = format();
+  if (surface_format.alphaBufferSize() < 8) {
+    surface_format.setAlphaBufferSize(8);
+    setFormat(surface_format);
+  }
 }
 
 void Live2DCanvas::initializeGL() {

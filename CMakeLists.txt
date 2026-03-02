@@ -5,6 +5,8 @@ project(MikuDesk VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# Disable C++20 module scanning to avoid Ninja dyndep crashes on large third-party trees.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
@@ -12,27 +14,32 @@ set(CMAKE_AUTORCC ON)
 
 if(MSVC)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT ProgramDatabase)
-  add_compile_options(/Zi /W4 /permissive- /EHsc)
-  add_link_options(/DEBUG /OPT:REF /OPT:ICF)
+  set(_mikudesk_msvc_compile_options /Zi /W4 /permissive- /EHsc)
+  set(_mikudesk_msvc_link_options /DEBUG /OPT:REF /OPT:ICF)
 endif()
 
-option(MIKUDESK_ENABLE_LIVE2D "Enable Live2D integration" ON)
-option(MIKUDESK_ENABLE_LLAMA "Enable local llama.cpp integration" OFF)
-option(MIKUDESK_ENABLE_TTS "Enable TTS integration" OFF)
-set(MIKUDESK_CUBISM_SDK_PATH
-    "${CMAKE_SOURCE_DIR}/third_party/CubismSdkForNative"
-    CACHE PATH "Path to Cubism SDK for Native root directory")
 set(_mikudesk_default_llama_path "${CMAKE_SOURCE_DIR}/third_party/llama.cpp")
 if(NOT EXISTS "${_mikudesk_default_llama_path}/CMakeLists.txt" AND
    EXISTS "${CMAKE_SOURCE_DIR}/third_party/llama/CMakeLists.txt")
   set(_mikudesk_default_llama_path "${CMAKE_SOURCE_DIR}/third_party/llama")
 endif()
+set(_mikudesk_default_llama_enabled OFF)
+if(EXISTS "${_mikudesk_default_llama_path}/CMakeLists.txt")
+  set(_mikudesk_default_llama_enabled ON)
+endif()
+
+option(MIKUDESK_ENABLE_LIVE2D "Enable Live2D integration" ON)
+option(MIKUDESK_ENABLE_LLAMA "Enable local llama.cpp integration"
+       ${_mikudesk_default_llama_enabled})
+option(MIKUDESK_ENABLE_LLAMA_CUDA "Enable llama.cpp CUDA backend when CUDA toolkit is available"
+       ON)
+option(MIKUDESK_ENABLE_TTS "Enable TTS integration" OFF)
+set(MIKUDESK_CUBISM_SDK_PATH
+    "${CMAKE_SOURCE_DIR}/third_party/CubismSdkForNative"
+    CACHE PATH "Path to Cubism SDK for Native root directory")
 set(MIKUDESK_LLAMA_CPP_PATH
     "${_mikudesk_default_llama_path}"
     CACHE PATH "Path to llama.cpp root directory")
-set(MIKUDESK_IMGUI_PATH
-    "${CMAKE_SOURCE_DIR}/third_party/imgui"
-    CACHE PATH "Path to Dear ImGui root directory")
 
 include(CTest)
 
@@ -64,27 +71,14 @@ set(mikudesk_core_sources
   src/resource/config_store.cpp
   src/security/dpapi_secret_store.cpp
   src/ui/chat_bubble.cpp
-  src/ui/imgui_layer.cpp
+  src/ui/chat_input_dialog.cpp
   src/ui/settings_window.cpp
+  ui/chat/chat_input_dialog.ui
   src/window/desk_pet_window.cpp
   ui/settings/settings_window.ui
   ui/window/desk_pet_window.ui
   src/window/window_manager.cpp
 )
-
-set(imgui_sources)
-if(EXISTS "${MIKUDESK_IMGUI_PATH}/imgui.cpp")
-  set(imgui_sources
-    "${MIKUDESK_IMGUI_PATH}/imgui.cpp"
-    "${MIKUDESK_IMGUI_PATH}/imgui_draw.cpp"
-    "${MIKUDESK_IMGUI_PATH}/imgui_tables.cpp"
-    "${MIKUDESK_IMGUI_PATH}/imgui_widgets.cpp"
-    "${MIKUDESK_IMGUI_PATH}/backends/imgui_impl_opengl3.cpp"
-  )
-else()
-  message(FATAL_ERROR
-    "Dear ImGui source is missing. Expected at: ${MIKUDESK_IMGUI_PATH}")
-endif()
 
 set(cubism_framework_sources)
 set(cubism_core_library)
@@ -133,6 +127,26 @@ if(MIKUDESK_ENABLE_LLAMA)
       "MIKUDESK_ENABLE_LLAMA=ON but llama.cpp source is missing: ${MIKUDESK_LLAMA_CPP_PATH}")
   endif()
 
+  if(MIKUDESK_ENABLE_LLAMA_CUDA)
+    find_program(_mikudesk_nvcc NAMES nvcc nvcc.exe HINTS ENV CUDA_PATH PATH_SUFFIXES bin)
+    if(_mikudesk_nvcc)
+      if(MSVC)
+        if(NOT CMAKE_CUDA_FLAGS MATCHES "(^| )-allow-unsupported-compiler( |$)")
+          set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -allow-unsupported-compiler"
+              CACHE STRING "Global CUDA compiler flags" FORCE)
+        endif()
+      endif()
+      set(GGML_CUDA ON CACHE BOOL "ggml: use CUDA" FORCE)
+      message(STATUS "Enabled llama.cpp CUDA backend (nvcc: ${_mikudesk_nvcc})")
+    else()
+      set(GGML_CUDA OFF CACHE BOOL "ggml: use CUDA" FORCE)
+      message(WARNING
+        "MIKUDESK_ENABLE_LLAMA_CUDA=ON but nvcc was not found. Falling back to CPU backend.")
+    endif()
+  else()
+    set(GGML_CUDA OFF CACHE BOOL "ggml: use CUDA" FORCE)
+  endif()
+
   # Keep llama.cpp static in this workspace to avoid runtime DLL lookup issues.
   set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
   set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -152,20 +166,15 @@ endif()
 
 add_library(mikudesk_core STATIC
   ${mikudesk_core_sources}
-  ${imgui_sources}
   ${cubism_framework_sources}
 )
 
 set_target_properties(mikudesk_core PROPERTIES
   AUTOUIC_SEARCH_PATHS
-    "${CMAKE_CURRENT_SOURCE_DIR}/ui/window;${CMAKE_CURRENT_SOURCE_DIR}/ui/settings"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ui/window;${CMAKE_CURRENT_SOURCE_DIR}/ui/settings;${CMAKE_CURRENT_SOURCE_DIR}/ui/chat"
 )
 
 target_include_directories(mikudesk_core PUBLIC src)
-target_include_directories(mikudesk_core PRIVATE
-  "${MIKUDESK_IMGUI_PATH}"
-  "${MIKUDESK_IMGUI_PATH}/backends"
-)
 if(MIKUDESK_ENABLE_LIVE2D)
   target_include_directories(mikudesk_core PRIVATE
     "${MIKUDESK_CUBISM_SDK_PATH}/Core/include"
@@ -193,6 +202,8 @@ target_link_libraries(mikudesk_core
 )
 
 if(MSVC)
+  target_compile_options(mikudesk_core PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:${_mikudesk_msvc_compile_options}>)
   target_compile_definitions(mikudesk_core PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
 
@@ -219,6 +230,11 @@ endif()
 
 add_executable(mikudesk src/main.cpp)
 target_link_libraries(mikudesk PRIVATE mikudesk_core)
+if(MSVC)
+  target_compile_options(mikudesk PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:${_mikudesk_msvc_compile_options}>)
+  target_link_options(mikudesk PRIVATE ${_mikudesk_msvc_link_options})
+endif()
 
 set(mikudesk_assets_source_dir "${CMAKE_SOURCE_DIR}/assets")
 if(EXISTS "${mikudesk_assets_source_dir}")
@@ -255,29 +271,64 @@ endif()
 
 add_executable(config_store_test tests/config_store_test.cpp)
 target_link_libraries(config_store_test PRIVATE mikudesk_core)
+if(MSVC)
+  target_compile_options(config_store_test PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:${_mikudesk_msvc_compile_options}>)
+  target_link_options(config_store_test PRIVATE ${_mikudesk_msvc_link_options})
+endif()
 add_test(NAME config_store_test COMMAND config_store_test)
 
 add_executable(dpapi_secret_store_test tests/dpapi_secret_store_test.cpp)
 target_link_libraries(dpapi_secret_store_test PRIVATE mikudesk_core)
+if(MSVC)
+  target_compile_options(dpapi_secret_store_test PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:${_mikudesk_msvc_compile_options}>)
+  target_link_options(dpapi_secret_store_test PRIVATE ${_mikudesk_msvc_link_options})
+endif()
 add_test(NAME dpapi_secret_store_test COMMAND dpapi_secret_store_test)
 
 add_executable(startup_smoke_test tests/startup_smoke_test.cpp)
 target_link_libraries(startup_smoke_test PRIVATE mikudesk_core)
+if(MSVC)
+  target_compile_options(startup_smoke_test PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:${_mikudesk_msvc_compile_options}>)
+  target_link_options(startup_smoke_test PRIVATE ${_mikudesk_msvc_link_options})
+endif()
 add_test(NAME startup_smoke_test COMMAND startup_smoke_test)
 
 add_executable(crash_dump_integration_test tests/crash_dump_integration_test.cpp)
 target_link_libraries(crash_dump_integration_test PRIVATE mikudesk_core)
+if(MSVC)
+  target_compile_options(crash_dump_integration_test PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:${_mikudesk_msvc_compile_options}>)
+  target_link_options(crash_dump_integration_test PRIVATE ${_mikudesk_msvc_link_options})
+endif()
 add_test(NAME crash_dump_integration_test COMMAND crash_dump_integration_test)
 set_tests_properties(crash_dump_integration_test PROPERTIES LABELS integration)
 
 add_executable(performance_monitor_smoke_test tests/performance_monitor_smoke_test.cpp)
 target_link_libraries(performance_monitor_smoke_test PRIVATE mikudesk_core)
+if(MSVC)
+  target_compile_options(performance_monitor_smoke_test PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:${_mikudesk_msvc_compile_options}>)
+  target_link_options(performance_monitor_smoke_test PRIVATE ${_mikudesk_msvc_link_options})
+endif()
 add_test(NAME performance_monitor_smoke_test COMMAND performance_monitor_smoke_test)
 
 add_executable(sse_parser_test tests/sse_parser_test.cpp)
 target_link_libraries(sse_parser_test PRIVATE mikudesk_core)
+if(MSVC)
+  target_compile_options(sse_parser_test PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:${_mikudesk_msvc_compile_options}>)
+  target_link_options(sse_parser_test PRIVATE ${_mikudesk_msvc_link_options})
+endif()
 add_test(NAME sse_parser_test COMMAND sse_parser_test)
 
 add_executable(chat_context_test tests/chat_context_test.cpp)
 target_link_libraries(chat_context_test PRIVATE mikudesk_core)
+if(MSVC)
+  target_compile_options(chat_context_test PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:${_mikudesk_msvc_compile_options}>)
+  target_link_options(chat_context_test PRIVATE ${_mikudesk_msvc_link_options})
+endif()
 add_test(NAME chat_context_test COMMAND chat_context_test)

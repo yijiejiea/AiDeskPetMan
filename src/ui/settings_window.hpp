@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include <QDialog>
@@ -26,6 +27,7 @@ class SettingsWindow final : public QDialog {
                           std::filesystem::path config_path,
                           std::function<void(const app::AppConfig&)> on_apply,
                           std::function<diagnostics::PerformanceSnapshot()> get_performance_snapshot,
+                          std::function<std::string()> get_inference_backend_status,
                           QWidget* parent = nullptr);
   ~SettingsWindow() override;
 
@@ -53,6 +55,7 @@ class SettingsWindow final : public QDialog {
   resource::ConfigStore config_store_;
   std::function<void(const app::AppConfig&)> on_apply_;
   std::function<diagnostics::PerformanceSnapshot()> get_performance_snapshot_;
+  std::function<std::string()> get_inference_backend_status_;
   std::vector<std::filesystem::path> available_skin_directories_;
   QTimer performance_timer_;
   bool updating_ui_ = false;

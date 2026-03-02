@@ -5,6 +5,11 @@
 #include <QTimer>
 #include <QWidget>
 
+class QEnterEvent;
+class QEvent;
+class QPaintEvent;
+class QTextBrowser;
+
 namespace mikudesk::ui {
 
 class ChatBubble final : public QWidget {
@@ -18,13 +23,16 @@ class ChatBubble final : public QWidget {
 
  protected:
   void paintEvent(QPaintEvent* event) override;
+  void enterEvent(QEnterEvent* event) override;
+  void leaveEvent(QEvent* event) override;
 
  private:
-  QSize ComputeBubbleSize(int max_width) const;
+  QSize ComputeBubbleSize(int max_width, int max_height) const;
 
   QString text_;
   bool streaming_ = false;
   QTimer auto_hide_timer_;
+  QTextBrowser* text_view_ = nullptr;
 };
 
 }  // namespace mikudesk::ui

@@ -3,12 +3,16 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <string>
+#include <string_view>
+#include <thread>
 #include <vector>
 
 #include <QCloseEvent>
 #include <QPoint>
 #include <QRect>
 #include <QElapsedTimer>
+#include <QString>
 #include <QWidget>
 
 #include "ai/chat_service.hpp"
@@ -26,6 +30,7 @@ class Live2DCanvas;
 
 namespace mikudesk::ui {
 class ChatBubble;
+class ChatInputDialog;
 class SettingsWindow;
 }
 
@@ -59,6 +64,11 @@ class DeskPetWindow final : public QWidget {
   void ApplyUpdatedConfig(const app::AppConfig& updated_config);
   void ApplyLive2dBehaviorConfig();
   void ApplyWindowGeometryConfig();
+  void ShowChatInputDialog();
+  void SubmitChatMessage(std::string user_message);
+  void UpdateChatBubbleText(const QString& text, bool streaming);
+  std::string BuildInferenceBackendStatusText() const;
+  void LogInferencePerformanceSnapshot(std::string_view stage) const;
   void EnsureLive2dViewInitialized();
   std::filesystem::path BuildCurrentModelDirectory() const;
   void ReloadCurrentSkin();
@@ -73,6 +83,7 @@ class DeskPetWindow final : public QWidget {
   app::SkinConfig skin_config_;
   std::vector<std::filesystem::path> available_skin_directories_;
   std::unique_ptr<ui::ChatBubble> chat_bubble_;
+  std::unique_ptr<ui::ChatInputDialog> chat_input_dialog_;
   std::unique_ptr<ui::SettingsWindow> settings_window_;
   std::unique_ptr<renderer::Live2DRenderer> live2d_renderer_;
   diagnostics::PerformanceMonitor performance_monitor_;
@@ -80,9 +91,11 @@ class DeskPetWindow final : public QWidget {
   bool dragging_ = false;
   bool press_started_on_model_ = false;
   bool press_moved_ = false;
+  bool chat_request_in_flight_ = false;
   QPoint drag_offset_;
   QPoint press_global_position_;
   QElapsedTimer frame_timer_;
+  std::jthread chat_worker_;
 };
 
 }  // namespace mikudesk::window

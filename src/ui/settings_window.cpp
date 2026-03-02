@@ -134,13 +134,15 @@ std::string DefaultApiBaseForProvider(app::AiProvider provider) {
 SettingsWindow::SettingsWindow(
     const app::AppConfig& initial_config, std::filesystem::path config_path,
     std::function<void(const app::AppConfig&)> on_apply,
-    std::function<diagnostics::PerformanceSnapshot()> get_performance_snapshot, QWidget* parent)
+    std::function<diagnostics::PerformanceSnapshot()> get_performance_snapshot,
+    std::function<std::string()> get_inference_backend_status, QWidget* parent)
     : QDialog(parent),
       ui_(std::make_unique<Ui::SettingsWindow>()),
       config_(initial_config),
       config_path_(std::move(config_path)),
       on_apply_(std::move(on_apply)),
-      get_performance_snapshot_(std::move(get_performance_snapshot)) {
+      get_performance_snapshot_(std::move(get_performance_snapshot)),
+      get_inference_backend_status_(std::move(get_inference_backend_status)) {
   ui_->setupUi(this);
   setModal(false);
   setAttribute(Qt::WA_DeleteOnClose, false);
@@ -498,6 +500,16 @@ void SettingsWindow::UpdateAiControlState() const {
 }
 
 void SettingsWindow::UpdatePerformanceSnapshotUi() {
+  QString backend_status_text = QStringLiteral("推理后端状态：unknown");
+  if (get_inference_backend_status_) {
+    const std::string backend_status = get_inference_backend_status_();
+    if (!backend_status.empty()) {
+      backend_status_text = QStringLiteral("推理后端状态：%1")
+                                .arg(QString::fromStdString(backend_status));
+    }
+  }
+  ui_->debug_help_label->setText(backend_status_text);
+
   if (!ui_->show_performance_metrics_check_box->isChecked() || !get_performance_snapshot_) {
     ui_->perf_cpu_value_label->setText(QStringLiteral("--"));
     ui_->perf_gpu_value_label->setText(QStringLiteral("--"));
@@ -603,4 +615,3 @@ std::vector<std::filesystem::path> SettingsWindow::DiscoverSkinDirectories() con
 }
 
 }  // namespace mikudesk::ui
-

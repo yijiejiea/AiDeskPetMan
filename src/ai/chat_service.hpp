@@ -29,16 +29,15 @@ class ChatService {
 
  private:
   app::Result<void> RebuildEnginesLocked();
-  IInferenceEngine* GetCurrentEngineLocked();
+  std::shared_ptr<IInferenceEngine> GetCurrentEngineLocked();
   std::string ResolveApiBaseUrlLocked() const;
 
   mutable std::mutex mutex_;
   app::AppConfig app_config_;
   ChatContext context_;
   app::InferenceMode active_mode_ = app::InferenceMode::kTokenApi;
-  std::unique_ptr<CloudEngine> cloud_engine_;
-  std::unique_ptr<LocalEngine> local_engine_;
+  std::shared_ptr<CloudEngine> cloud_engine_;
+  std::shared_ptr<LocalEngine> local_engine_;
 };
 
 }  // namespace mikudesk::ai
-
